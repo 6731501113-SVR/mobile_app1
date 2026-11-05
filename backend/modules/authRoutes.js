@@ -16,11 +16,11 @@ router.post('/register', async (req, res) => {
             return res.status(400).json({ success: false, message: 'Please provide all required fields.' });
         }
 
-        // --- Hash password using Argon2 ---
+        // --- Hash password using Argon2 ---   
         const hashedPassword = await argon2.hash(password);
 
         const sql = 'INSERT INTO users (username, password, full_name, role) VALUES (?, ?, ?, ?)';
-        const defaultRole = role || 'user'; 
+        const defaultRole = role || 'borrower'; //change from 'user' to 'borrower' to match database
 
         // Save to the mobile_app database
         db.query(sql, [username, hashedPassword, full_name, defaultRole], (err, result) => {
