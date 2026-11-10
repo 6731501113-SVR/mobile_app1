@@ -4,7 +4,7 @@ const con = mysql.createConnection({
    port: 20078,
    user: 'avnadmin',
    password: 'AVNS_3o4Uup1uH3_enXIl-ld',
-   database: 'defaultdb'
+   database: 'rentDB'
 });
 
 
