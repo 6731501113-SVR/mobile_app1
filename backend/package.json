@@ -1,9 +1,11 @@
 {
   "name": "backend",
   "version": "1.0.0",
-  "description": "",
+  "description": "Mobile App API (Borrowing System)",
   "main": "app.js",
   "scripts": {
+    "start": "node app.js",
+    "dev": "node --watch app.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -11,9 +13,9 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "@node-rs/argon2": "^2.2.2",
     "argon2": "^0.45.2",
     "cors": "^2.8.6",
+    "dotenv": "^16.6.1",
     "express": "^5.3.0",
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.5.0",

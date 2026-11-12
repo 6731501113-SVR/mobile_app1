@@ -1,1 +1,9 @@
 /docker-compose.yml
+
+node_modules/
+.env
+*.log
+
+# รูปที่อัปโหลด (เก็บไว้เฉพาะ .gitkeep เพื่อให้โฟลเดอร์ถูก commit)
+uploads/*
+!uploads/.gitkeep
