@@ -91,3 +91,9 @@ exports.claim = async (id, conn) => {
 exports.setStatus = async (id, status, conn) => {
     await runner(conn).query('UPDATE equipment SET status = ? WHERE id = ?', [status, id]);
 };
+
+// อ่านสถานะของอุปกรณ์หลายชิ้น (ไม่ล็อกแถว)
+exports.findStatusesByIds = async (ids, conn) => {
+    const [rows] = await runner(conn).query('SELECT id, status FROM equipment WHERE id IN (?)', [ids]);
+    return rows;
+};

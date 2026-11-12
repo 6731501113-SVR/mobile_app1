@@ -3,12 +3,12 @@ const equipmentModel = require('../models/equipmentModel');
 const { withTransaction } = require('../config/db');
 const HttpError = require('../utils/httpError');
 const { removeUploadedFile, cleanupOnError } = require('../utils/files');
+const { todayInThailand, daysBetween } = require('../utils/dates'); // 🌟 ใช้ตัวจัดการวันที่ตามเวลาไทย
 
 const CONDITIONS = ['good', 'damaged', 'lost'];
 const EQUIPMENT_STATUS_AFTER_RETURN = { good: 'available', damaged: 'maintenance', lost: 'lost' };
 const MAX_BORROW_DAYS = 4;
 const FINE_PER_DAY = 30; // บาท/วัน
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 const isAdmin = (user) => user.role === 'admin';
 
@@ -26,7 +26,7 @@ exports.listByUser = async (req, res) => {
     res.json(await borrowModel.attachItems(rows));
 };
 
-// GET /api/borrows/equipment/:id/booked-dates (Public) ช่วงวันที่ที่อุปกรณ์ถูกจองแล้ว
+// GET /api/borrows/equipment/:id/booked-dates (Public) ช่วงวันที่ที่อุปกรณ์ถูกจองแล้ว (รวม pending, approved, borrowed)
 exports.bookedDates = async (req, res) => {
     const rows = await borrowModel.findBookedDates(req.params.id);
     res.json({ success: true, booked_dates: rows });
@@ -60,9 +60,7 @@ exports.create = async (req, res) => {
         throw new HttpError(400, { success: false, message: 'equipment_ids must contain valid equipment ids.' });
     }
 
-    const start = new Date(start_date);
-    const end = new Date(end_date);
-    const diffDays = Math.ceil((end - start) / MS_PER_DAY) + 1;
+    const diffDays = daysBetween(start_date, end_date) + 1;
 
     if (Number.isNaN(diffDays) || diffDays <= 0) {
         throw new HttpError(400, { success: false, message: 'Invalid borrow duration dates.' });
@@ -72,7 +70,6 @@ exports.create = async (req, res) => {
     }
 
     const result = await withTransaction(async (conn) => {
-        // ล็อกแถวอุปกรณ์ก่อน เพื่อให้คำขอที่เข้ามาพร้อมกันต้องต่อคิว แล้วตรวจวันชนซ้ำได้ถูกต้อง
         const equipments = await equipmentModel.findByIdsForUpdate(ids, conn);
 
         if (equipments.length !== ids.length) {
@@ -130,7 +127,7 @@ exports.uploadSlip = cleanupOnError(async (req, res) => {
 
     const slipUrl = `/uploads/${req.file.filename}`;
     await borrowModel.setSlip(borrow.id, slipUrl);
-    removeUploadedFile(borrow.slip_url); // ลบสลิปเก่าที่ถูกแทนที่
+    removeUploadedFile(borrow.slip_url);
 
     res.json({ success: true, message: 'Payment slip uploaded successfully.', slip_url: slipUrl });
 });
@@ -152,9 +149,9 @@ exports.verifyPayment = async (req, res) => {
     res.json({ success: true, message: `Payment status updated to '${payment_status}' successfully.` });
 };
 
-// PUT /api/borrows/:id/approve (Admin) body: { status?: "approved"|"rejected", admin_note? }
+// PUT /api/borrows/:id/approve (Admin) อนุมัติ + กำหนดเวลาหมดอายุชำระ 24 ชม. (ไม่เปลี่ยนสถานะอุปกรณ์เป็น borrowed ตอนนี้)
 exports.approve = async (req, res) => {
-    const { status = 'approved', admin_note } = req.body || {};
+    const { status = 'approved', admin_note, payment_hours = 24 } = req.body || {};
     const adminId = req.user.id;
 
     if (!['approved', 'rejected'].includes(status)) {
@@ -168,34 +165,19 @@ exports.approve = async (req, res) => {
     }
 
     if (status === 'rejected') {
-        const ok = await borrowModel.setReviewed(borrow.id, 'rejected', adminId, admin_note || null);
+        const ok = await borrowModel.setRejected(borrow.id, adminId, admin_note || null);
         if (!ok) throw new HttpError(409, { message: 'Request status changed, please retry' });
         return res.json({ message: 'Borrow request rejected' });
     }
 
-    // อนุมัติ: จองอุปกรณ์ทุกชิ้นในใบ + เปลี่ยนสถานะใบ ใน transaction เดียว (ไม่สำเร็จ = ย้อนกลับทั้งหมด)
-    await withTransaction(async (conn) => {
-        const items = await borrowModel.getItems(borrow.id, conn);
-        if (items.length === 0) throw new HttpError(400, { message: 'This request has no items' });
+    // อนุมัติ: เซ็ตเวลาครบกำหนด 24 ชม. โดยยังไม่ล็อกสถานะอุปกรณ์ (ให้อุปกรณ์ไปล็อกตอน Handover)
+    const ok = await borrowModel.setApproved(borrow.id, adminId, admin_note || null, payment_hours);
+    if (!ok) throw new HttpError(409, { message: 'Request status changed, please retry' });
 
-        for (const it of items) {
-            const claimed = await equipmentModel.claim(it.equipment_id, conn);
-            if (!claimed) {
-                throw new HttpError(400, {
-                    message: 'Some equipment is no longer available',
-                    equipment_id: it.equipment_id
-                });
-            }
-        }
-
-        const ok = await borrowModel.setReviewed(borrow.id, 'approved', adminId, admin_note || null, conn);
-        if (!ok) throw new HttpError(409, { message: 'Request status changed, please retry' });
-    });
-
-    res.json({ message: 'Borrow request approved' });
+    res.json({ message: 'Borrow request approved with 24-hour payment deadline' });
 };
 
-// PUT /api/borrows/:id/handover (Admin) บันทึกส่งมอบอุปกรณ์
+// 🌟 PUT /api/borrows/:id/handover (Admin) ส่งมอบ: เช็กว่าจ่ายเงินแล้ว (paid) และเปลี่ยนสถานะอุปกรณ์เป็น borrowed
 exports.handover = async (req, res) => {
     const borrow = await borrowModel.findRequestById(req.params.id);
     if (!borrow) throw new HttpError(404, { success: false, message: 'Borrow request not found.' });
@@ -207,72 +189,114 @@ exports.handover = async (req, res) => {
         });
     }
 
-    await borrowModel.setHandledBy(borrow.id, req.user.id);
-    res.json({ success: true, message: 'Equipment handover recorded successfully.' });
+    // เงื่อนไขใหม่: ต้องจ่ายเงินเรียบร้อยแล้วเท่านั้นถึงส่งมอบได้
+    if (borrow.payment_status !== 'paid') {
+        throw new HttpError(400, {
+            success: false,
+            message: `Cannot handover: payment status must be 'paid' (current: ${borrow.payment_status})`
+        });
+    }
+
+    await withTransaction(async (conn) => {
+        const items = await borrowModel.getItems(borrow.id, conn);
+        for (const it of items) {
+            const claimed = await equipmentModel.claim(it.equipment_id, conn);
+            if (!claimed) {
+                throw new HttpError(400, {
+                    message: `Equipment ID ${it.equipment_id} is no longer available`,
+                    equipment_id: it.equipment_id
+                });
+            }
+        }
+
+        const ok = await borrowModel.markHandedOver(borrow.id, req.user.id, conn);
+        if (!ok) throw new HttpError(409, { message: 'Request status changed, please retry' });
+    });
+
+    res.json({ success: true, message: 'Equipment handover recorded successfully and status changed to borrowed.' });
 };
 
-// PUT /api/borrows/:id/return (Admin) body: { admin_note?, items?: [{ equipment_id, condition_after, fine_paid? }] }
-// ค่าปรับคำนวณที่ server (30 บาท/วัน) ไม่รับจากแอป แล้วหักจากเงินมัดจำ
+// 🌟 PUT /api/borrows/:id/return (Admin) บันทึกรับคืน + รองรับ damage_fine และคำนวณวันคืนช้าด้วยเวลาไทย
 exports.returnEquipment = async (req, res) => {
     const { admin_note, items: returned = [] } = req.body || {};
 
     const borrow = await borrowModel.findRequestById(req.params.id);
     if (!borrow) throw new HttpError(404, { success: false, message: 'Borrow request not found.' });
 
-    if (!['approved', 'borrowed'].includes(borrow.status)) {
-        throw new HttpError(400, { success: false, message: `Cannot return: status is ${borrow.status}` });
+    if (borrow.status !== 'borrowed') {
+        throw new HttpError(400, { success: false, message: `Cannot return: status must be 'borrowed' (current: ${borrow.status})` });
     }
     if (!Array.isArray(returned)) {
         throw new HttpError(400, { success: false, message: 'items must be an array' });
     }
 
-    // ตรวจข้อมูลที่ส่งมาให้ครบก่อนเริ่มเขียนข้อมูล
     const detail = {};
     for (const r of returned) {
         const cond = r.condition_after ?? 'good';
         if (!CONDITIONS.includes(cond)) {
             throw new HttpError(400, { success: false, message: 'Invalid condition' });
         }
-        detail[Number(r.equipment_id)] = { cond, paid: r.fine_paid ? 1 : 0 };
+        const damageFine = Number(r.damage_fine) || 0;
+        detail[Number(r.equipment_id)] = { cond, damageFine };
     }
 
-    // คำนวณค่าปรับ
-    const now = new Date();
-    const dueDate = new Date(borrow.end_date);
-    let lateDays = 0;
-    let fineAmount = 0;
-    if (now > dueDate) {
-        lateDays = Math.ceil((now - dueDate) / MS_PER_DAY);
-        fineAmount = lateDays * FINE_PER_DAY;
+    // คำนวณวันคืนช้าตามเวลาไทย (ป้องกันปัญหาวันที่เลื่อน)
+    const todayStr = todayInThailand();
+    const lateDays = Math.max(0, daysBetween(borrow.end_date, todayStr));
+    const lateFine = lateDays * FINE_PER_DAY;
+
+    // คำนวณค่าปรับรวมทั้งหมด (ค่าปรับคืนช้า + ค่าปรับความเสียหายทุกชิ้น)
+    let totalItemDamageFine = 0;
+    for (const eid in detail) {
+        totalItemDamageFine += detail[eid].damageFine;
     }
-    const totalDeposit = Number(borrow.total_deposit) || 0;
-    const depositRefund = Math.max(0, totalDeposit - fineAmount);
+    const totalFineAmount = lateFine + totalItemDamageFine;
 
     await withTransaction(async (conn) => {
         const items = await borrowModel.getItems(borrow.id, conn);
 
-        const ok = await borrowModel.markReturned(borrow.id, fineAmount, admin_note || null, conn);
+        const ok = await borrowModel.markReturned(borrow.id, totalFineAmount, admin_note || null, conn);
         if (!ok) throw new HttpError(409, { success: false, message: 'Request status changed, please retry' });
 
         for (const it of items) {
-            const d = detail[it.equipment_id] || { cond: 'good', paid: 0 };
-            // เฉลี่ยค่าปรับต่อชิ้น
-            await borrowModel.updateItemAfterReturn(it.id, d.cond, fineAmount / items.length, d.paid, conn);
+            const d = detail[it.equipment_id] || { cond: 'good', damageFine: 0 };
+            // บันทึกสภาพหลังคืน และค่าปรับเสียหายรายชิ้น
+            await borrowModel.updateItemAfterReturn(it.id, d.cond, d.damageFine, conn);
             await equipmentModel.setStatus(it.equipment_id, EQUIPMENT_STATUS_AFTER_RETURN[d.cond], conn);
         }
     });
 
     res.json({
         success: true,
-        message: 'Equipment returned successfully with server-calculated fine.',
+        message: 'Equipment returned successfully.',
         data: {
             borrow_id: borrow.id,
             late_days: lateDays,
-            fine_amount: fineAmount,
-            original_deposit: totalDeposit,
-            deposit_refund: depositRefund
+            late_fine: lateFine,
+            total_damage_fine: totalItemDamageFine,
+            fine_amount: totalFineAmount
         }
     });
+};
+
+// 🌟 PUT /api/borrows/:id/pay-fine (Admin) บันทึกว่าชำระค่าปรับส่วนเกินเรียบร้อยแล้วทีหลัง
+exports.payFine = async (req, res) => {
+    const borrow = await borrowModel.findRequestById(req.params.id);
+    if (!borrow) throw new HttpError(404, { success: false, message: 'Borrow request not found.' });
+
+    if (borrow.status !== 'returned') {
+        throw new HttpError(400, { success: false, message: "Cannot mark fine paid: request status must be 'returned'." });
+    }
+
+    await withTransaction(async (conn) => {
+        const ok = await borrowModel.markFinePaid(borrow.id, conn);
+        if (!ok) {
+            throw new HttpError(409, { success: false, message: 'Fine is already marked as paid or status changed.' });
+        }
+        await borrowModel.markItemsFinePaid(borrow.id, conn);
+    });
+
+    res.json({ success: true, message: 'Fine payment status updated to paid successfully.' });
 };
 
 // PUT /api/borrows/:id/cancel (เจ้าของใบหรือ Admin) ยกเลิกได้เฉพาะใบที่ยัง pending

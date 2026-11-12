@@ -17,6 +17,9 @@ const ITEM_SELECT = `
     FROM borrow_items bi
     JOIN equipment e ON e.id = bi.equipment_id`;
 
+// สถานะของใบที่ "จองช่วงวันนั้นไว้" (ใช้ทั้งปฏิทินจองและตรวจวันชนซ้ำ)
+const HOLDING_STATUSES = "'pending', 'approved', 'borrowed'";
+
 // ---------- อ่านข้อมูล ----------
 
 exports.findRequestById = async (id, conn) => {
@@ -64,25 +67,27 @@ exports.attachItems = async (requests) => {
     return requests.map((r) => ({ ...r, items: byRequest[r.id] || [] }));
 };
 
+// ช่วงวันที่อุปกรณ์ถูกจองแล้ว (pending / approved / borrowed)
 exports.findBookedDates = async (equipmentId) => {
     const [rows] = await pool.query(
-        `SELECT br.start_date, br.end_date
+        `SELECT br.start_date, br.end_date, br.status
          FROM borrow_requests br
          JOIN borrow_items bi ON bi.request_id = br.id
-         WHERE bi.equipment_id = ? AND br.status = 'approved'`,
+         WHERE bi.equipment_id = ? AND br.status IN (${HOLDING_STATUSES})
+         ORDER BY br.start_date`,
         [equipmentId]
     );
     return rows;
 };
 
-// อุปกรณ์ที่มีใบคำขออื่น (pending/approved) ทับช่วงวันที่ขอ
+// อุปกรณ์ที่มีใบอื่นจองทับช่วงวันที่ขอ
 exports.findOverlaps = async (equipmentIds, startDate, endDate, conn) => {
     const [rows] = await runner(conn).query(
         `SELECT bi.equipment_id
          FROM borrow_requests br
          JOIN borrow_items bi ON bi.request_id = br.id
          WHERE bi.equipment_id IN (?)
-           AND br.status IN ('approved', 'pending')
+           AND br.status IN (${HOLDING_STATUSES})
            AND NOT (br.end_date < ? OR br.start_date > ?)`,
         [equipmentIds, startDate, endDate]
     );
@@ -122,38 +127,68 @@ exports.setPaymentStatus = async (id, paymentStatus, adminNote) => {
     );
 };
 
-// อนุมัติ/ปฏิเสธ (เฉพาะใบที่ยัง pending) คืน true ถ้าเปลี่ยนสำเร็จ
-exports.setReviewed = async (id, status, adminId, adminNote, conn) => {
+// อนุมัติ (เฉพาะใบที่ยัง pending) + ตั้งเวลาครบกำหนดชำระ payment_due_at = ตอนนี้ + N ชม.
+exports.setApproved = async (id, adminId, adminNote, paymentHours, conn) => {
     const [result] = await runner(conn).query(
         `UPDATE borrow_requests
-         SET status = ?, approved_by = ?, handled_by = ?, admin_note = ?
+         SET status = 'approved', approved_by = ?, handled_by = ?, admin_note = ?,
+             payment_due_at = DATE_ADD(NOW(), INTERVAL ? HOUR)
          WHERE id = ? AND status = 'pending'`,
-        [status, adminId, adminId, adminNote, id]
+        [adminId, adminId, adminNote, paymentHours, id]
     );
     return result.affectedRows > 0;
 };
 
-exports.setHandledBy = async (id, adminId) => {
-    await pool.query('UPDATE borrow_requests SET handled_by = ? WHERE id = ?', [adminId, id]);
+// ปฏิเสธ (เฉพาะใบที่ยัง pending)
+exports.setRejected = async (id, adminId, adminNote, conn) => {
+    const [result] = await runner(conn).query(
+        `UPDATE borrow_requests
+         SET status = 'rejected', approved_by = ?, handled_by = ?, admin_note = ?
+         WHERE id = ? AND status = 'pending'`,
+        [adminId, adminId, adminNote, id]
+    );
+    return result.affectedRows > 0;
 };
 
-// บันทึกการคืน (เฉพาะใบที่ approved/borrowed) คืน true ถ้าสำเร็จ
+// ส่งมอบอุปกรณ์: approved -> borrowed
+exports.markHandedOver = async (id, adminId, conn) => {
+    const [result] = await runner(conn).query(
+        "UPDATE borrow_requests SET status = 'borrowed', handled_by = ? WHERE id = ? AND status = 'approved'",
+        [adminId, id]
+    );
+    return result.affectedRows > 0;
+};
+
+// บันทึกการคืน (เฉพาะใบที่ส่งมอบแล้ว = borrowed) fineAmount = ค่าปรับรวม (คืนช้า + ชำรุด/สูญหาย)
 exports.markReturned = async (id, fineAmount, adminNote, conn) => {
     const [result] = await runner(conn).query(
         `UPDATE borrow_requests
          SET status = 'returned', actual_return_date = NOW(), fine_amount = ?,
              admin_note = COALESCE(?, admin_note)
-         WHERE id = ? AND status IN ('approved', 'borrowed')`,
+         WHERE id = ? AND status = 'borrowed'`,
         [fineAmount, adminNote, id]
     );
     return result.affectedRows > 0;
 };
 
-exports.updateItemAfterReturn = async (itemId, condition, fineAmount, finePaid, conn) => {
+exports.updateItemAfterReturn = async (itemId, condition, fineAmount, conn) => {
     await runner(conn).query(
-        'UPDATE borrow_items SET condition_after = ?, fine_amount = ?, fine_paid = ? WHERE id = ?',
-        [condition, fineAmount, finePaid, itemId]
+        'UPDATE borrow_items SET condition_after = ?, fine_amount = ? WHERE id = ?',
+        [condition, fineAmount, itemId]
     );
+};
+
+// ตั้งว่าจ่ายค่าปรับส่วนเกินแล้ว (เฉพาะใบที่คืนแล้วและยังไม่เคยตั้ง)
+exports.markFinePaid = async (id, conn) => {
+    const [result] = await runner(conn).query(
+        "UPDATE borrow_requests SET fine_paid = 1 WHERE id = ? AND status = 'returned' AND fine_paid = 0",
+        [id]
+    );
+    return result.affectedRows > 0;
+};
+
+exports.markItemsFinePaid = async (requestId, conn) => {
+    await runner(conn).query('UPDATE borrow_items SET fine_paid = 1 WHERE request_id = ?', [requestId]);
 };
 
 // ยกเลิก (เฉพาะใบที่ยัง pending) คืน true ถ้าสำเร็จ
@@ -163,4 +198,19 @@ exports.cancel = async (id) => {
         [id]
     );
     return result.affectedRows > 0;
+};
+
+// ยกเลิกใบที่อนุมัติแล้วแต่เลยกำหนดชำระโดยยังไม่จ่าย คืนจำนวนใบที่ถูกยกเลิก
+exports.cancelExpiredUnpaid = async () => {
+    const [result] = await pool.query(
+        `UPDATE borrow_requests
+         SET status = 'cancelled',
+             admin_note = CONCAT('Auto-cancelled: payment not received before the deadline.',
+                                 IF(admin_note IS NULL OR admin_note = '', '', CONCAT(' | ', admin_note)))
+         WHERE status = 'approved'
+           AND payment_status <> 'paid'
+           AND payment_due_at IS NOT NULL
+           AND payment_due_at < NOW()`
+    );
+    return result.affectedRows;
 };

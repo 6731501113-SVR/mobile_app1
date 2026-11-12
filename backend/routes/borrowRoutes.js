@@ -17,5 +17,6 @@ router.put('/:id/approve', requireAdmin, ctrl.approve);
 router.put('/:id/handover', requireAdmin, ctrl.handover);
 router.put('/:id/return', requireAdmin, ctrl.returnEquipment);
 router.put('/:id/cancel', verifyToken, ctrl.cancel);
+router.put('/:id/pay-fine', requireAdmin, ctrl.payFine);
 
 module.exports = router;

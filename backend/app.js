@@ -4,6 +4,7 @@ const cors = require('cors');
 const db = require('./config/db');
 const { UPLOAD_DIR } = require('./utils/files');
 const { notFound, errorHandler } = require('./middleware/errorHandler');
+const paymentExpiry = require('./config/paymentExpiry');
 
 const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
@@ -41,7 +42,12 @@ app.use(errorHandler);
 // --- Run Server (เริ่มรับ request หลังต่อฐานข้อมูลได้แล้วเท่านั้น) ---
 db.checkConnection()
     .then(() => {
-        app.listen(config.port, () => console.log(`Server is running at port ${config.port}`));
+        app.listen(config.port, () => {
+            console.log(`Server is running at port ${config.port}`);
+            
+            // เริ่มรันระบบเช็กตัดยอดใบคำขอที่เกิน 24 ชม. ทันทีเมื่อเปิดเซิร์ฟเวอร์
+            paymentExpiry.start();
+        });
     })
     .catch((err) => {
         console.error(`Cannot connect to MySQL (${config.db.host}:${config.db.port}): ${err.message}`);
