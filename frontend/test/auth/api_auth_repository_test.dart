@@ -22,6 +22,13 @@ const userJson = {
   'role': 'borrower',
 };
 
+String makeToken([int id = 7]) {
+  final payload = base64UrlEncode(
+    utf8.encode(jsonEncode({'id': id, 'username': '6731500002', 'role': 'borrower'})),
+  );
+  return 'eyJhbGciOiJub25lIn0.$payload.signature';
+}
+
 void main() {
   late MemoryTokenStore tokens;
   late List<http.Request> sent;
@@ -45,7 +52,12 @@ void main() {
 
   group('register', () {
     test('sends only username, full_name and password - never a role', () async {
-      useServer((_) => json({'token': 'tok', 'user': userJson}, 201));
+      int calls = 0;
+      useServer((request) {
+        calls++;
+        if (calls == 1) return json({'success': true, 'data': {'userId': 7, 'username': '6731500002', 'full_name': 'มาลี รักเรียน', 'role': 'borrower'}}, 201);
+        return json({'token': 'tok', 'data': userJson}, 200);
+      });
 
       final user = await repo.register(
         username: '6731500002',
@@ -53,10 +65,11 @@ void main() {
         password: 'secret123',
       );
 
-      final request = sent.single;
-      expect(request.method, 'POST');
-      expect(request.url.path, '/api/auth/register');
-      final body = jsonDecode(request.body) as Map<String, dynamic>;
+      expect(sent.length, 2);
+      final registerRequest = sent.first;
+      expect(registerRequest.method, 'POST');
+      expect(registerRequest.url.path, '/api/auth/register');
+      final body = jsonDecode(registerRequest.body) as Map<String, dynamic>;
       expect(body, {
         'username': '6731500002',
         'full_name': 'มาลี รักเรียน',
@@ -86,7 +99,7 @@ void main() {
 
   group('login', () {
     test('stores the token and returns the user', () async {
-      useServer((_) => json({'token': 'tok', 'user': userJson}));
+      useServer((_) => json({'token': 'tok', 'data': userJson}));
 
       final user = await repo.login(username: '6731500002', password: 'secret123');
 
@@ -136,18 +149,18 @@ void main() {
     });
 
     test('sends the saved token and returns the user', () async {
-      tokens.token = 'saved';
-      useServer((_) => json({'user': userJson}));
+      tokens.token = makeToken();
+      useServer((_) => json({'data': userJson}));
 
       final user = await repo.restoreSession();
 
       expect(user?.username, '6731500002');
-      expect(sent.single.url.path, '/api/auth/me');
-      expect(sent.single.headers['authorization'], 'Bearer saved');
+      expect(sent.single.url.path, '/api/users/7');
+      expect(sent.single.headers['authorization'], 'Bearer ${tokens.token}');
     });
 
     test('an expired token is cleared and gives null', () async {
-      tokens.token = 'expired';
+      tokens.token = makeToken();
       useServer((_) => json({
             'error': {'code': 'UNAUTHORIZED', 'message': 'เซสชันหมดอายุ'},
           }, 401));
@@ -158,11 +171,11 @@ void main() {
     });
 
     test('being offline keeps the token so the user can retry', () async {
-      tokens.token = 'saved';
+      tokens.token = makeToken();
       useServer((_) => throw http.ClientException('offline'));
 
       await expectLater(repo.restoreSession(), throwsA(isA<ApiException>()));
-      expect(tokens.token, 'saved');
+      expect(tokens.token, makeToken());
     });
   });
 

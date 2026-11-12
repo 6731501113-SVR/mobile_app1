@@ -7,7 +7,7 @@ import 'package:http/http.dart' as http;
 ///   flutter run --dart-define=API_BASE_URL=http://192.168.1.20:3000
 /// (10.0.2.2 is the host machine as seen from the Android emulator.)
 const String kApiBaseUrl =
-    String.fromEnvironment('API_BASE_URL', defaultValue: 'http://10.0.2.2:3000');
+    String.fromEnvironment('API_BASE_URL', defaultValue: 'http://localhost:3000');
 
 /// Error returned by the backend (`{error:{code,message,details}}`) or a
 /// network failure. [message] is already user-facing Thai text.
@@ -47,6 +47,9 @@ class ApiClient {
 
   Future<dynamic> post(String path, {Object? body}) =>
       _send('POST', path, body: body ?? const <String, dynamic>{});
+
+  Future<dynamic> put(String path, {Object? body}) =>
+      _send('PUT', path, body: body ?? const <String, dynamic>{});
 
   Future<dynamic> patch(String path, {Object? body}) =>
       _send('PATCH', path, body: body ?? const <String, dynamic>{});

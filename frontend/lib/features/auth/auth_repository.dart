@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../../core/api_client.dart';
@@ -51,49 +53,94 @@ class ApiAuthRepository implements AuthRepository {
   final ApiClient _api;
   final TokenStore _tokens;
 
+  int? _userIdFromToken(String token) {
+    try {
+      final parts = token.split('.');
+      if (parts.length < 2) return null;
+
+      final payload = parts[1].replaceAll('-', '+').replaceAll('_', '/');
+      final padded = payload.padRight((payload.length + 3) & ~3, '=');
+      final decoded = utf8.decode(base64Url.decode(padded));
+      final json = jsonDecode(decoded) as Map<String, dynamic>;
+      return int.tryParse('${json['id']}');
+    } catch (_) {
+      return null;
+    }
+  }
+
+  AppUser _fromBackendData(Map<String, dynamic> data) => AppUser(
+        id: (data['userId'] ?? data['id']) as int,
+        username: data['username'] as String,
+        fullName: (data['full_name'] ?? data['fullName']) as String,
+        role: (data['role'] ?? 'borrower') == 'admin'
+            ? UserRole.admin
+            : UserRole.borrower,
+      );
+
   @override
   Future<AppUser?> restoreSession() async {
     final saved = await _tokens.read();
     if (saved == null) return null;
+
     _api.token = saved;
+    final userId = _userIdFromToken(saved);
+    if (userId == null) {
+      await logout();
+      return null;
+    }
+
     try {
-      final j = await _api.get('/api/auth/me') as Map<String, dynamic>;
-      return AppUser.fromJson(j['user'] as Map<String, dynamic>);
+      Map<String, dynamic> j;
+      try {
+        j = await _api.get('/api/users/$userId') as Map<String, dynamic>;
+      } on ApiException catch (e) {
+        if (e.status == 404) {
+          j = await _api.get('/api/auth/me') as Map<String, dynamic>;
+        } else {
+          rethrow;
+        }
+      }
+      final raw = (j['data'] ?? j['user']) as Map<String, dynamic>;
+      return _fromBackendData(raw);
     } on ApiException catch (e) {
       if (e.status == 401) {
         await logout();
         return null;
       }
-      rethrow; // offline etc.: keep the token, let the caller offer a retry
+      rethrow;
     }
   }
 
-  Future<AppUser> _start(dynamic json) async {
-    final j = json as Map<String, dynamic>;
+  @override
+  Future<AppUser> login({required String username, required String password}) async {
+    final j = await _api.post(
+      '/api/auth/login',
+      body: {'username': username, 'password': password},
+    ) as Map<String, dynamic>;
+
     final token = j['token'] as String;
     _api.token = token;
     await _tokens.write(token);
-    return AppUser.fromJson(j['user'] as Map<String, dynamic>);
-  }
 
-  @override
-  Future<AppUser> login({required String username, required String password}) async =>
-      _start(await _api.post(
-        '/api/auth/login',
-        body: {'username': username, 'password': password},
-      ));
+    final raw = (j['data'] ?? j['user']) as Map<String, dynamic>;
+    return _fromBackendData(raw);
+  }
 
   @override
   Future<AppUser> register({
     required String username,
     required String fullName,
     required String password,
-  }) async =>
-      _start(await _api.post(
-        '/api/auth/register',
-        // No role here on purpose: the server always creates borrowers.
-        body: {'username': username, 'full_name': fullName, 'password': password},
-      ));
+  }) async {
+    await _api.post(
+      '/api/auth/register',
+      // The server creates borrowers only; a separate login call is required
+      // to receive the JWT that the app keeps in storage.
+      body: {'username': username, 'full_name': fullName, 'password': password},
+    );
+
+    return login(username: username, password: password);
+  }
 
   @override
   Future<void> logout() async {

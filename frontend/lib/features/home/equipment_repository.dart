@@ -10,10 +10,16 @@ class ApiEquipmentRepository implements EquipmentRepository {
   ApiEquipmentRepository(this._api);
   final ApiClient _api;
 
-  List<T> _items<T>(dynamic json, T Function(Map<String, dynamic>) f) =>
-      ((json as Map<String, dynamic>)['items'] as List)
-          .map((e) => f(e as Map<String, dynamic>))
-          .toList();
+  List<T> _items<T>(dynamic json, T Function(Map<String, dynamic>) f) {
+    final raw = json is List
+        ? json
+        : (json is Map ? (json['data'] ?? json['items'] ?? const <dynamic>[]) : const <dynamic>[]);
+    if (raw is! List) return const [];
+    return raw
+        .whereType<Map>()
+        .map((e) => f(Map<String, dynamic>.from(e)))
+        .toList();
+  }
 
   @override
   Future<List<Category>> fetchCategories() async =>
@@ -21,5 +27,5 @@ class ApiEquipmentRepository implements EquipmentRepository {
 
   @override
   Future<List<Equipment>> fetchEquipment() async =>
-      _items(await _api.get('/api/equipment'), Equipment.fromJson);
+      _items(await _api.get('/api/equipments'), Equipment.fromJson);
 }
