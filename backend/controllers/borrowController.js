@@ -3,7 +3,7 @@ const equipmentModel = require('../models/equipmentModel');
 const { withTransaction } = require('../config/db');
 const HttpError = require('../utils/httpError');
 const { removeUploadedFile, cleanupOnError } = require('../utils/files');
-const { todayInThailand, daysBetween } = require('../utils/dates'); // 🌟 ใช้ตัวจัดการวันที่ตามเวลาไทย
+const { todayInThailand, daysBetween } = require('../utils/date'); // 🌟 ใช้ตัวจัดการวันที่ตามเวลาไทย
 
 const CONDITIONS = ['good', 'damaged', 'lost'];
 const EQUIPMENT_STATUS_AFTER_RETURN = { good: 'available', damaged: 'maintenance', lost: 'lost' };
