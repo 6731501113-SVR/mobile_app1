@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 
 import '../../../core/api_client.dart';
 import '../models/equipment.dart';
@@ -100,44 +101,110 @@ class ApiRepository {
     request.fields['stock'] = equipment.stock.toString();
 
     if (imageFile != null) {
+      final contentType = _imageContentType(imageFile);
       request.files.add(http.MultipartFile.fromBytes(
         'image',
         await imageFile.readAsBytes(),
         filename: imageFile.name,
+        contentType: contentType,
       ));
     }
 
     var streamedResponse = await request.send();
     var response = await http.Response.fromStream(streamedResponse);
 
-    return response.statusCode == 200 || response.statusCode == 201;
+    if (response.statusCode == 200 || response.statusCode == 201) return true;
+
+    String message = 'Equipment save failed (${response.statusCode})';
+    if (response.body.isNotEmpty) {
+      try {
+        final body = json.decode(response.body);
+        if (body is Map && body['message'] is String) {
+          message = body['message'] as String;
+        }
+      } on FormatException {
+        // Keep the HTTP status message when the server response is not JSON.
+      }
+    }
+    throw Exception(message);
+  }
+
+  MediaType _imageContentType(XFile imageFile) {
+    final mimeType = imageFile.mimeType;
+    if (mimeType != null) {
+      switch (mimeType.toLowerCase()) {
+        case 'image/jpeg':
+          return MediaType('image', 'jpeg');
+        case 'image/png':
+          return MediaType('image', 'png');
+        case 'image/gif':
+          return MediaType('image', 'gif');
+        case 'image/webp':
+          return MediaType('image', 'webp');
+      }
+    }
+
+    final extension = imageFile.name.toLowerCase().split('.').last;
+    switch (extension) {
+      case 'jpg':
+      case 'jpeg':
+        return MediaType('image', 'jpeg');
+      case 'png':
+        return MediaType('image', 'png');
+      case 'gif':
+        return MediaType('image', 'gif');
+      case 'webp':
+        return MediaType('image', 'webp');
+      default:
+        throw FormatException('Unsupported image type: ${imageFile.name}');
+    }
   }
 
   // --- Slip & Borrow Request APIs ---
   Future<List<BorrowRequest>> getPendingSlips() async {
     final response = await http.get(
-      Uri.parse('$baseUrl/borrow/pending-slips'),
+      Uri.parse('$baseUrl/borrows').replace(queryParameters: {'status': 'approved'}),
       headers: _headers(),
     );
     if (response.statusCode == 200) {
-      Iterable list = json.decode(response.body);
-      return list.map((model) => BorrowRequest.fromJson(model)).toList();
-    } else {
-      throw Exception('Failed to load pending slips');
+      final decoded = json.decode(response.body);
+      if (decoded is! List) {
+        throw const FormatException('Invalid pending slips response');
+      }
+      return decoded
+          .map((model) => BorrowRequest.fromJson(Map<String, dynamic>.from(model as Map)))
+          .where((request) =>
+              request.paymentStatus == 'pending' &&
+              request.slipUrl != null &&
+              request.slipUrl!.isNotEmpty)
+          .toList();
     }
+    throw Exception(_responseMessage(response, 'Failed to load pending slips'));
   }
 
   Future<bool> verifySlip(int requestId, bool approve, String adminNote) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl/borrow/verify-slip/$requestId'),
+    final response = await http.put(
+      Uri.parse('$baseUrl/borrows/$requestId/verify-payment'),
       headers: _headers(json: true),
       body: json.encode({
-        'status': approve ? 'approved' : 'rejected',
         'payment_status': approve ? 'paid' : 'rejected',
         'admin_note': adminNote,
       }),
     );
     return response.statusCode == 200;
+  }
+
+  String _responseMessage(http.Response response, String fallback) {
+    if (response.body.isEmpty) return '$fallback (${response.statusCode})';
+    try {
+      final body = json.decode(response.body);
+      if (body is Map && body['message'] is String) {
+        return body['message'] as String;
+      }
+    } on FormatException {
+      // Use the status-based message for non-JSON responses.
+    }
+    return '$fallback (${response.statusCode})';
   }
 
   // --- Delivery & Return APIs ---

@@ -29,15 +29,15 @@ class _AdminPendingSlipScreenState extends State<AdminPendingSlipScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('ตรวจสอบสลิป (คำขอ # \${request.id})'),
+        title: Text('ตรวจสอบสลิป (คำขอ # ${request.id})'),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('ผู้ใช้ ID: \${request.userId}'),
-              Text('วัตถุประสงค์: \${request.purpose}'),
-              Text('ยอดรวม: \${request.totalPrice} บาท | มัดจำ: \${request.totalDeposit} บาท'),
+              Text('ผู้ใช้ ID: ${request.userId}'),
+              Text('วัตถุประสงค์: ${request.purpose}'),
+              Text('ยอดรวม: ${request.totalPrice} บาท | มัดจำ: ${request.totalDeposit} บาท'),
               const SizedBox(height: 12),
               const Text('รูปภาพสลิปโอนเงิน:', style: TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
@@ -49,7 +49,7 @@ class _AdminPendingSlipScreenState extends State<AdminPendingSlipScreen> {
                     ? Image.network(
                         request.slipUrl!.startsWith('http')
                             ? request.slipUrl!
-                            : '\${ApiRepository.baseUrl}/\${request.slipUrl}',
+                            : '${ApiRepository.serverUrl}${request.slipUrl!.startsWith('/') ? '' : '/'}${request.slipUrl}',
                         fit: BoxFit.cover,
                         errorBuilder: (context, error, stackTrace) =>
                             const Center(child: Text('ไม่สามารถโหลดรูปภาพสลิปได้')),
@@ -87,6 +87,7 @@ class _AdminPendingSlipScreenState extends State<AdminPendingSlipScreen> {
 
   Future<void> _processVerification(int requestId, bool approve) async {
     bool success = await _apiRepository.verifySlip(requestId, approve, approve ? 'สลิปถูกต้อง' : 'สลิปไม่ถูกต้อง');
+    if (!mounted) return;
     if (success) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(approve ? 'อนุมัติสลิปสำเร็จ' : 'ปฏิเสธสลิปเรียบร้อย')),
@@ -109,7 +110,7 @@ class _AdminPendingSlipScreenState extends State<AdminPendingSlipScreen> {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           } else if (snapshot.hasError) {
-            return Center(child: Text('เกิดข้อผิดพลาด: \${snapshot.error}'));
+            return Center(child: Text('เกิดข้อผิดพลาด: ${snapshot.error}'));
           } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
             return const Center(child: Text('ไม่มีใบคำขอที่รอตรวจสลิปในขณะนี้'));
           }
@@ -122,8 +123,8 @@ class _AdminPendingSlipScreenState extends State<AdminPendingSlipScreen> {
               return Card(
                 margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 child: ListTile(
-                  title: Text('คำขอรหัส: #\${req.id} (User ID: \${req.userId})'),
-                  subtitle: Text('ยอดชำระ: \${req.totalPrice + req.totalDeposit} บาท\nวันที่ยืม: \${req.startDate} ถึง \${req.endDate}'),
+                  title: Text('คำขอรหัส: #${req.id} (User ID: ${req.userId})'),
+                  subtitle: Text('ยอดชำระ: ${req.totalPrice + req.totalDeposit} บาท\nวันที่ยืม: ${req.startDate} ถึง ${req.endDate}'),
                   trailing: ElevatedButton(
                     onPressed: () => _showSlipDetailModal(req),
                     child: const Text('ตรวจสลิป'),
