@@ -52,3 +52,24 @@ class BorrowRequest {
     );
   }
 }
+
+class BorrowRequestItem {
+  const BorrowRequestItem({
+    required this.equipmentId,
+    required this.equipmentName,
+    required this.assetCode,
+  });
+
+  final int equipmentId;
+  final String equipmentName;
+  final String assetCode;
+
+  factory BorrowRequestItem.fromJson(Map<String, dynamic> json) =>
+      BorrowRequestItem(
+        equipmentId: json['equipment_id'] is int
+            ? json['equipment_id'] as int
+            : int.parse(json['equipment_id'].toString()),
+        equipmentName: json['equipment_name'] as String? ?? '',
+        assetCode: json['asset_code'] as String? ?? '',
+      );
+}

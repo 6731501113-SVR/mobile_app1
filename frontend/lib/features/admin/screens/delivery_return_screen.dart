@@ -1,11 +1,18 @@
 import 'package:flutter/material.dart';
+
+import '../../../core/api_client.dart';
+import '../models/borrow_request.dart';
 import '../repositories/api_repository.dart';
 
 class DeliveryReturnScreen extends StatefulWidget {
   final int requestId;
   final double totalDeposit;
 
-  const DeliveryReturnScreen({super.key, required this.requestId, required this.totalDeposit});
+  const DeliveryReturnScreen({
+    super.key,
+    required this.requestId,
+    required this.totalDeposit,
+  });
 
   @override
   State<DeliveryReturnScreen> createState() => _DeliveryReturnScreenState();
@@ -13,103 +20,228 @@ class DeliveryReturnScreen extends StatefulWidget {
 
 class _DeliveryReturnScreenState extends State<DeliveryReturnScreen> {
   final ApiRepository _apiRepository = ApiRepository();
-  final TextEditingController _fineController = TextEditingController(text: '0.0');
-  String _conditionAfter = 'good';
+  late Future<List<BorrowRequestItem>> _items;
+  final Map<int, String> _conditions = {};
+  final Map<int, TextEditingController> _damageFineControllers = {};
   bool _isLoading = false;
 
-  void _submitReturn() async {
-    double fine = double.tryParse(_fineController.text) ?? 0.0;
-    setState(() => _isLoading = true);
+  @override
+  void initState() {
+    super.initState();
+    _items = _apiRepository.getBorrowRequestItems(widget.requestId);
+  }
 
-    try {
-      bool success = await _apiRepository.processReturn(widget.requestId, fine, _conditionAfter);
-      if (success) {
-        double refundAmount = widget.totalDeposit - fine;
-        if (refundAmount < 0) refundAmount = 0;
+  @override
+  void dispose() {
+    for (final controller in _damageFineControllers.values) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
 
-        if (!mounted) return;
-        showDialog(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('บันทึกการรับคืนสำเร็จ'),
-            content: Text('หักค่าปรับ: \$fine บาท\nยอดเงินมัดจำที่ต้องคืนผู้ยืม: \$refundAmount บาท'),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  Navigator.pop(context); // ปิด Dialog
-                  Navigator.pop(context, true); // กลับหน้าก่อนหน้า
-                },
-                child: const Text('ตกลง'),
-              ),
-            ],
+  TextEditingController _fineControllerFor(BorrowRequestItem item) =>
+      _damageFineControllers.putIfAbsent(
+        item.equipmentId,
+        () => TextEditingController(text: '0'),
+      );
+
+  double _damageFineTotal(List<BorrowRequestItem> items) => items.fold<double>(
+    0,
+    (total, item) =>
+        total + (double.tryParse(_fineControllerFor(item).text) ?? 0),
+  );
+
+  double _amount(dynamic value) {
+    if (value is num) return value.toDouble();
+    if (value is String) return double.parse(value);
+    throw const FormatException('Invalid amount in return response');
+  }
+
+  Future<void> _submitReturn(List<BorrowRequestItem> items) async {
+    final damageFines = <Map<String, dynamic>>[];
+    for (final item in items) {
+      final damageFine = double.tryParse(_fineControllerFor(item).text);
+      if (damageFine == null || damageFine < 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('กรุณากรอกค่าปรับเป็นตัวเลขตั้งแต่ 0 ขึ้นไป'),
           ),
         );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('บันทึกไม่สำเร็จ')));
+        return;
       }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: \$e')));
-    } finally {
-      setState(() => _isLoading = false);
+      damageFines.add({
+        'equipment_id': item.equipmentId,
+        'condition_after': _conditions[item.equipmentId] ?? 'good',
+        'damage_fine': damageFine,
+      });
     }
+
+    setState(() => _isLoading = true);
+    try {
+      final result = await _apiRepository.processReturn(
+        widget.requestId,
+        damageFines,
+      );
+      final lateFine = _amount(result['late_fine']);
+      final damageFine = _amount(result['total_damage_fine']);
+      final totalFine = _amount(result['fine_amount']);
+      final refund = widget.totalDeposit > totalFine
+          ? widget.totalDeposit - totalFine
+          : 0.0;
+      final extraDue = totalFine > widget.totalDeposit
+          ? totalFine - widget.totalDeposit
+          : 0.0;
+
+      if (!mounted) return;
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('บันทึกการรับคืนสำเร็จ'),
+          content: Text(
+            'ค่าปรับคืนล่าช้า: $lateFine บาท\n'
+            'ค่าปรับความเสียหาย: $damageFine บาท\n'
+            'ค่าปรับรวม: $totalFine บาท\n'
+            'ยอดเงินมัดจำที่ต้องคืน: $refund บาท\n'
+            'ค่าปรับส่วนเกินมัดจำ: $extraDue บาท',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('ตกลง'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed == true && mounted) {
+        Navigator.pop(context, true);
+      }
+    } on ApiException catch (error) {
+      if (mounted) _showError(error.message);
+    } catch (error) {
+      if (mounted) _showError('บันทึกการรับคืนไม่สำเร็จ: $error');
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
   Widget build(BuildContext context) {
-    double fine = double.tryParse(_fineController.text) ?? 0.0;
-    double calculatedRefund = widget.totalDeposit - fine;
-    if (calculatedRefund < 0) calculatedRefund = 0;
-
     return Scaffold(
-      appBar: AppBar(title: const Text('จัดการส่งมอบและรับคืนอุปกรณ์')),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: ListView(
-          children: [
-            Text('รหัสคำขอยืม: #\${widget.requestId}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 12),
-            Text('เงินมัดจำทั้งหมด: \${widget.totalDeposit} บาท', style: const TextStyle(fontSize: 16)),
-            const SizedBox(height: 16),
-            DropdownButtonFormField<String>(
-              value: _conditionAfter,
-              decoration: const InputDecoration(labelText: 'สภาพอุปกรณ์หลังคืน'),
-              items: const [
-                DropdownMenuItem(value: 'good', child: Text('ปกติ (Good)')),
-                DropdownMenuItem(value: 'damaged', child: Text('ชำรุด (Damaged)')),
-                DropdownMenuItem(value: 'lost', child: Text('สูญหาย (Lost)')),
-              ],
-              onChanged: (val) => setState(() => _conditionAfter = val!),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _fineController,
-              decoration: const InputDecoration(labelText: 'จำนวนเงินค่าปรับ (บาท)'),
-              keyboardType: TextInputType.number,
-              onChanged: (val) => setState(() {}),
-            ),
-            const SizedBox(height: 20),
-            Container(
-              padding: const EdgeInsets.all(12),
-              color: Colors.grey[100],
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('สรุปยอดเงินมัดจำ: \${widget.totalDeposit} บาท'),
-                  Text('หักค่าปรับ: \$fine บาท'),
-                  const Divider(),
-                  Text('ยอดเงินมัดจำที่ต้องคืนสุทธิ: \$calculatedRefund บาท',
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.green)),
-                ],
+      appBar: AppBar(title: const Text('จัดการรับคืนอุปกรณ์')),
+      body: FutureBuilder<List<BorrowRequestItem>>(
+        future: _items,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(
+                  'โหลดรายการอุปกรณ์ไม่สำเร็จ: ${snapshot.error}',
+                  textAlign: TextAlign.center,
+                ),
               ),
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent),
-              onPressed: _isLoading ? null : _submitReturn,
-              child: _isLoading ? const CircularProgressIndicator() : const Text('ยืนยันรับคืนและคำนวณเงินมัดจำ'),
-            ),
-          ],
-        ),
+            );
+          }
+
+          final items = snapshot.data ?? const <BorrowRequestItem>[];
+          if (items.isEmpty) {
+            return const Center(child: Text('ไม่พบอุปกรณ์ในคำขอนี้'));
+          }
+
+          return ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              Text(
+                'รหัสคำขอยืม: #${widget.requestId}',
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text('เงินมัดจำทั้งหมด: ${widget.totalDeposit} บาท'),
+              const SizedBox(height: 12),
+              for (final item in items) ...[
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('${item.equipmentName} · ${item.assetCode}'),
+                        const SizedBox(height: 8),
+                        DropdownButtonFormField<String>(
+                          initialValue: _conditions[item.equipmentId] ?? 'good',
+                          decoration: const InputDecoration(
+                            labelText: 'สภาพอุปกรณ์หลังคืน',
+                          ),
+                          items: const [
+                            DropdownMenuItem(
+                              value: 'good',
+                              child: Text('ปกติ'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'damaged',
+                              child: Text('ชำรุด'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'lost',
+                              child: Text('สูญหาย'),
+                            ),
+                          ],
+                          onChanged: _isLoading
+                              ? null
+                              : (value) {
+                                  if (value == null) return;
+                                  setState(() {
+                                    _conditions[item.equipmentId] = value;
+                                  });
+                                },
+                        ),
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: _fineControllerFor(item),
+                          enabled: !_isLoading,
+                          decoration: const InputDecoration(
+                            labelText: 'ค่าปรับความเสียหายของชิ้นนี้ (บาท)',
+                          ),
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                          onChanged: (_) => setState(() {}),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ],
+              Text('ค่าปรับความเสียหายที่ระบุ: ${_damageFineTotal(items)} บาท'),
+              const Text(
+                'ระบบจะคำนวณค่าปรับคืนล่าช้าให้โดยอัตโนมัติ และสรุปยอดมัดจำหลังบันทึก',
+              ),
+              const SizedBox(height: 20),
+              FilledButton(
+                onPressed: _isLoading ? null : () => _submitReturn(items),
+                child: _isLoading
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('ยืนยันรับคืนและคำนวณเงินมัดจำ'),
+              ),
+            ],
+          );
+        },
       ),
     );
   }

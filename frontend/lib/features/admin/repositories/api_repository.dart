@@ -174,14 +174,50 @@ class ApiRepository {
       '/api/borrows',
       query: {'status': 'pending'},
     );
+    return _parseBorrowRequests(decoded, 'Invalid pending borrow requests response');
+  }
+
+  Future<List<BorrowRequest>> getDeliveryRequests() async {
+    final decoded = await _authenticatedClient.get('/api/borrows');
+    return _parseBorrowRequests(decoded, 'Invalid borrow requests response')
+        .where(
+          (request) =>
+              (request.status == 'approved' && request.paymentStatus == 'paid') ||
+              request.status == 'borrowed',
+        )
+        .toList();
+  }
+
+  List<BorrowRequest> _parseBorrowRequests(dynamic decoded, String errorMessage) {
     if (decoded is! List) {
-      throw const FormatException('Invalid pending borrow requests response');
+      throw FormatException(errorMessage);
     }
     return decoded.map((row) {
       if (row is! Map) {
-        throw const FormatException('Invalid pending borrow request');
+        throw const FormatException('Invalid borrow request');
       }
       return BorrowRequest.fromJson(Map<String, dynamic>.from(row));
+    }).toList();
+  }
+
+  Future<void> processHandover(int requestId) async {
+    await _authenticatedClient.put('/api/borrows/$requestId/handover');
+  }
+
+  Future<List<BorrowRequestItem>> getBorrowRequestItems(int requestId) async {
+    final decoded = await _authenticatedClient.get('/api/borrows/$requestId');
+    if (decoded is! Map || decoded['data'] is! Map) {
+      throw const FormatException('Invalid borrow request details response');
+    }
+    final items = (decoded['data'] as Map)['items'];
+    if (items is! List) {
+      throw const FormatException('Borrow request details are missing items');
+    }
+    return items.map((item) {
+      if (item is! Map) {
+        throw const FormatException('Invalid borrow request item');
+      }
+      return BorrowRequestItem.fromJson(Map<String, dynamic>.from(item));
     }).toList();
   }
 
@@ -247,19 +283,17 @@ class ApiRepository {
   }
 
   // --- Delivery & Return APIs ---
-  Future<bool> processReturn(
+  Future<Map<String, dynamic>> processReturn(
     int requestId,
-    double fineAmount,
-    String conditionAfter,
+    List<Map<String, dynamic>> items,
   ) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl/borrow/return/$requestId'),
-      headers: _headers(json: true),
-      body: json.encode({
-        'fine_amount': fineAmount,
-        'condition_after': conditionAfter,
-      }),
+    final response = await _authenticatedClient.put(
+      '/api/borrows/$requestId/return',
+      body: {'items': items},
     );
-    return response.statusCode == 200;
+    if (response is! Map || response['data'] is! Map) {
+      throw const FormatException('Invalid return response');
+    }
+    return Map<String, dynamic>.from(response['data'] as Map);
   }
 }

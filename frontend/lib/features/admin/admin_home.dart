@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../../core/models.dart';
 import 'screens/admin_pending_borrow_screen.dart';
+import 'screens/admin_delivery_return_screen.dart';
 import 'screens/admin_pending_slip_screen.dart';
 import 'screens/category_form_screen.dart';
-import 'screens/delivery_return_screen.dart';
 import 'screens/equipment_form_screen.dart';
 
 /// Admin menu (Editor 2's screens). Replaces the old AdminHomeStub.
@@ -56,14 +56,8 @@ class AdminHome extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           FilledButton(
-            // TODO: DeliveryReturnScreen needs a real request id + deposit.
-            // Editor 2 hard-coded 101 / 500.0 as demo values; open it from a
-            // request list once the backend list endpoint is agreed.
-            onPressed: () => _open(
-              context,
-              const DeliveryReturnScreen(requestId: 101, totalDeposit: 500.0),
-            ),
-            child: const Text('ส่งมอบ/รับคืน (ตัวอย่าง)'),
+            onPressed: () => _open(context, const AdminDeliveryReturnScreen()),
+            child: const Text('ส่งมอบ/รับคืนอุปกรณ์'),
           ),
         ],
       ),
