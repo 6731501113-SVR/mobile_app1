@@ -205,8 +205,8 @@ class _PaymentScreenState extends State<PaymentScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(requestTitle(_r),
-              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+          // Text(requestTitle(_r),
+          //     style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
           Text('เช่า ${thaiShort(_r.startDate)} – ${thaiShort(_r.endDate)} (${_r.days} วัน)',
               style: const TextStyle(fontSize: 13, color: AppColors.muted)),
           const SizedBox(height: 8),
