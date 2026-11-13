@@ -55,10 +55,16 @@ class EquipmentListController extends ChangeNotifier {
     try {
       final equipment = await _repo.fetchEquipment();
       final categories = await _repo.fetchCategories();
-      _all = equipment;
+      final orderedEquipment = equipment.asMap().entries.toList()
+        ..sort((a, b) {
+          final availability = (b.value.selectable ? 1 : 0)
+              .compareTo(a.value.selectable ? 1 : 0);
+          return availability != 0 ? availability : a.key.compareTo(b.key);
+        });
+      _all = orderedEquipment.map((entry) => entry.value).toList();
       _categories = categories;
       // Drop selections that are no longer available after a refresh.
-      _selected.retainAll(equipment.where((e) => e.selectable).map((e) => e.id).toSet());
+      _selected.retainAll(_all.where((e) => e.selectable).map((e) => e.id).toSet());
       _error = null;
     } on ApiException catch (e) {
       if (showSpinner || _all.isEmpty) _error = e.message;

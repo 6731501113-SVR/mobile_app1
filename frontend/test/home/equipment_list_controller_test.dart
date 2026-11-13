@@ -43,7 +43,7 @@ void main() {
 
       expect(c.loading, isFalse);
       expect(c.error, isNull);
-      expect(ids(c.visible), [1, 2, 3, 4, 5]);
+      expect(ids(c.visible), [1, 2, 5, 3, 4]);
       expect(c.categories.map((x) => x.name), ['กล้อง', 'เครื่องเสียง']);
     });
 
@@ -123,7 +123,7 @@ void main() {
       expect(ids(c.visible), [2, 4]);
 
       c.selectCategory(null);
-      expect(ids(c.visible), [1, 2, 3, 4, 5]);
+      expect(ids(c.visible), [1, 2, 5, 3, 4]);
     });
 
     test('search matches name or asset code, ignoring case', () {
