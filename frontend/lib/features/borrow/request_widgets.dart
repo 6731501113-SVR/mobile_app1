@@ -15,6 +15,8 @@ class RequestStatusChip extends StatelessWidget {
     final (bg, fg, label) = switch (status) {
       RequestStatus.pending =>
         (const Color(0xFFFCE8BF), const Color(0xFF8A5A00), 'รออนุมัติ'),
+      RequestStatus.approved =>
+        (const Color(0xFFE0F2EF), const Color(0xFF0F766E), 'รอชำระเงิน'),
       RequestStatus.borrowing =>
         (const Color(0xFFDCE7FB), const Color(0xFF1F3F8F), 'กำลังเช่า'),
       RequestStatus.overdue =>

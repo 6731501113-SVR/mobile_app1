@@ -25,8 +25,8 @@ rn.BorrowRequest toRenterRequest(BorrowRequest r) {
   );
 
   final rn.RequestStatus status = switch (r.status) {
-    RequestStatus.pending =>
-      r.awaitingPayment ? rn.RequestStatus.approved : rn.RequestStatus.pending,
+    RequestStatus.pending => rn.RequestStatus.pending,
+    RequestStatus.approved => rn.RequestStatus.approved,
     RequestStatus.borrowing || RequestStatus.overdue => rn.RequestStatus.borrowed,
     RequestStatus.returned => rn.RequestStatus.returned,
     RequestStatus.rejected => rn.RequestStatus.rejected,

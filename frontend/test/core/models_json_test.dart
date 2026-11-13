@@ -1,5 +1,11 @@
+import 'dart:convert';
+
+import 'package:frontend/core/api_client.dart';
 import 'package:frontend/core/models.dart';
+import 'package:frontend/features/home/equipment_repository.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 
 void main() {
   group('Equipment JSON', () {
@@ -40,6 +46,16 @@ void main() {
       expect(e.deposit, 400.0);
     });
 
+    test('decimal strings from MySQL are accepted', () {
+      final e = Equipment.fromJson({
+        ...json,
+        'price_per_day': '60.00',
+        'deposit': '400.00',
+      });
+      expect(e.pricePerDay, 60.0);
+      expect(e.deposit, 400.0);
+    });
+
     test('missing price fields default to 0 and due_date may be null', () {
       final e = Equipment.fromJson({
         ...json,
@@ -73,6 +89,45 @@ void main() {
       expect(c.id, 2);
       expect(c.name, 'เครื่องเสียง');
       expect(c.toJson(), json);
+    });
+
+    test('accepts the backend value-array category form', () {
+      final c = Category.fromJson({'id': 2, 'category_name': 'เครื่องเสียง'});
+      expect(c.name, 'เครื่องเสียง');
+    });
+  });
+
+  group('EquipmentRepository', () {
+    test('accepts the backend raw array response', () async {
+      final payload = [
+        {
+          'id': 3,
+          'asset_code': 'WT-005',
+          'name': 'วอล์กกี้ทอล์กกี้ Motorola',
+          'category_id': 3,
+          'category_name': 'วิทยุสื่อสาร',
+          'image_url': null,
+          'price_per_day': '60.00',
+          'deposit': '400.00',
+          'status': 'borrowed',
+          'due_date': '2026-11-02',
+        },
+      ];
+
+      final repo = ApiEquipmentRepository(ApiClient(
+        baseUrl: 'http://test',
+        client: MockClient((_) async => http.Response.bytes(
+              utf8.encode(jsonEncode(payload)),
+              200,
+              headers: {'content-type': 'application/json; charset=utf-8'},
+            )),
+      ));
+
+      final items = await repo.fetchEquipment();
+      expect(items, hasLength(1));
+      expect(items.first.categoryName, 'วิทยุสื่อสาร');
+      expect(items.first.pricePerDay, 60.0);
+      expect(items.first.deposit, 400.0);
     });
   });
 

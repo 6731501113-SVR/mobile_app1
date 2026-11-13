@@ -334,6 +334,31 @@ class _RequestCard extends StatelessWidget {
           ],
         ];
 
+      case RequestStatus.approved:
+        return [
+          _dateLine('วันที่เช่า ${thaiDateSpan(r.startDate, r.endDate)}'),
+          if (r.awaitingPayment) ...[
+            const SizedBox(height: 10),
+            FilledButton(
+              onPressed: onPay,
+              style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(44)),
+              child: const Text('ชำระเงิน'),
+            ),
+          ] else if (r.paymentStatus == 'pending_review') ...[
+            const SizedBox(height: 6),
+            const Text(
+              'ส่งหลักฐานการชำระเงินแล้ว รอผู้ดูแลตรวจสอบ',
+              style: TextStyle(fontSize: 12.5, color: AppColors.textMuted),
+            ),
+          ] else if (r.paymentStatus == 'paid') ...[
+            const SizedBox(height: 6),
+            const Text(
+              'ชำระเงินแล้ว รอรับอุปกรณ์ตามวันที่จอง',
+              style: TextStyle(fontSize: 12.5, color: AppColors.textMuted),
+            ),
+          ],
+        ];
+
       case RequestStatus.borrowing:
         final left = r.daysLeft;
         final suffix = left == null

@@ -3,6 +3,16 @@ import 'dates.dart';
 // Models mirror the backend JSON (snake_case). Each has fromJson/toJson;
 // toJson(fromJson(x)) gives back the same map the backend sends.
 
+double _optionalDouble(dynamic value, String field) {
+  if (value == null) return 0;
+  if (value is num) return value.toDouble();
+  if (value is String) {
+    final parsed = double.tryParse(value);
+    if (parsed != null) return parsed;
+  }
+  throw FormatException('Invalid $field value: $value');
+}
+
 enum UserRole { borrower, admin }
 
 class AppUser {
@@ -38,8 +48,10 @@ class AppUser {
 class Category {
   const Category({required this.id, required this.name});
 
-  factory Category.fromJson(Map<String, dynamic> j) =>
-      Category(id: j['id'] as int, name: j['name'] as String);
+  factory Category.fromJson(Map<String, dynamic> j) => Category(
+        id: j['id'] as int,
+        name: (j['name'] ?? j['category_name']) as String,
+      );
 
   Map<String, dynamic> toJson() => {'id': id, 'name': name};
 
@@ -68,10 +80,10 @@ class Equipment {
         assetCode: j['asset_code'] as String,
         name: j['name'] as String,
         categoryId: j['category_id'] as int,
-        categoryName: j['category_name'] as String,
+        categoryName: (j['category_name'] ?? j['category'] ?? '') as String,
         imageUrl: j['image_url'] as String?,
-        pricePerDay: (j['price_per_day'] as num?)?.toDouble() ?? 0,
-        deposit: (j['deposit'] as num?)?.toDouble() ?? 0,
+        pricePerDay: _optionalDouble(j['price_per_day'], 'price_per_day'),
+        deposit: _optionalDouble(j['deposit'], 'deposit'),
         status: EquipmentStatus.values.firstWhere(
           (s) => s.name == j['status'],
           orElse: () => EquipmentStatus.maintenance,

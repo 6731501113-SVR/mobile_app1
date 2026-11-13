@@ -1,6 +1,6 @@
 import 'dart:convert';
-import 'dart:io';
 
+import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
 
 import '../../../core/api_client.dart';
@@ -9,6 +9,7 @@ import '../models/borrow_request.dart';
 
 class ApiRepository {
   /// Same backend as the rest of the app (override with --dart-define=API_BASE_URL).
+  static const String serverUrl = kApiBaseUrl;
   static const String baseUrl = '$kApiBaseUrl/api';
 
   /// Set once in main.dart so admin calls carry the logged-in admin's token.
@@ -22,7 +23,7 @@ class ApiRepository {
   // --- Equipment APIs ---
   Future<List<Equipment>> getEquipmentList() async {
     final response = await http.get(
-      Uri.parse('$baseUrl/equipment'),
+      Uri.parse('$baseUrl/equipments'),
       headers: _headers(),
     );
     if (response.statusCode == 200) {
@@ -52,9 +53,17 @@ class ApiRepository {
     );
     if (response.statusCode == 200) {
       final decoded = json.decode(response.body);
-      // Editor 1's client reads a plain list or {items: [...]}; accept both.
-      final list = decoded is Map ? decoded['items'] as List : decoded as List;
-      return list.cast<Map<String, dynamic>>();
+      final list = decoded is Map
+          ? (decoded['data'] ?? decoded['items'] ?? decoded['value']) as List
+          : decoded as List;
+      return list.map((category) {
+        final item = Map<String, dynamic>.from(category as Map);
+        final name = item['name'] ?? item['category_name'];
+        if (name is! String || name.isEmpty) {
+          throw const FormatException('Category response is missing its name');
+        }
+        return {...item, 'name': name};
+      }).toList();
     }
     throw Exception('Failed to load categories');
   }
@@ -64,7 +73,7 @@ class ApiRepository {
     final response = await http.post(
       Uri.parse('$baseUrl/categories'),
       headers: _headers(json: true),
-      body: json.encode({'name': categoryName}),
+      body: json.encode({'category_name': categoryName}),
     );
     return response.statusCode == 200 || response.statusCode == 201;
   }
@@ -72,12 +81,12 @@ class ApiRepository {
   // รองรับการอัปโหลดรูปภาพด้วย MultipartRequest
   Future<bool> saveEquipmentWithImage(
     Equipment equipment, {
-    File? imageFile,
+    XFile? imageFile,
     bool isUpdate = false,
   }) async {
     final uri = isUpdate
-        ? Uri.parse('$baseUrl/equipment/${equipment.id}')
-        : Uri.parse('$baseUrl/equipment');
+        ? Uri.parse('$baseUrl/equipments/${equipment.id}')
+        : Uri.parse('$baseUrl/equipments');
 
     var request = http.MultipartRequest(isUpdate ? 'PUT' : 'POST', uri);
     request.headers.addAll(_headers());
@@ -91,9 +100,11 @@ class ApiRepository {
     request.fields['stock'] = equipment.stock.toString();
 
     if (imageFile != null) {
-      request.files.add(
-        await http.MultipartFile.fromPath('image', imageFile.path),
-      );
+      request.files.add(http.MultipartFile.fromBytes(
+        'image',
+        await imageFile.readAsBytes(),
+        filename: imageFile.name,
+      ));
     }
 
     var streamedResponse = await request.send();

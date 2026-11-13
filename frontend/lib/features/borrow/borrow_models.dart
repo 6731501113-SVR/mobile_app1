@@ -8,7 +8,7 @@ class DateRange {
 }
 
 /// Matches the backend's `display_status`.
-enum RequestStatus { pending, borrowing, overdue, returned, rejected, cancelled }
+enum RequestStatus { pending, approved, borrowing, overdue, returned, rejected, cancelled }
 
 class BorrowRequest {
   const BorrowRequest({
@@ -97,7 +97,7 @@ class BorrowRequest {
 
   /// Approved by admin and waiting for the renter to pay (show "ชำระเงิน").
   bool get awaitingPayment =>
-      status == RequestStatus.pending &&
+      status == RequestStatus.approved &&
       paymentDueAt != null &&
       (paymentStatus == 'unpaid' || paymentStatus == 'rejected');
 

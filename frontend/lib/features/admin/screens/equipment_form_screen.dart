@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -28,7 +28,8 @@ class _EquipmentFormScreenState extends State<EquipmentFormScreen> {
   late String _status;
   late double _pricePerDay;
   late double _deposit;
-  File? _selectedImage;
+  XFile? _selectedImage;
+  Uint8List? _selectedImageBytes;
   bool _isLoading = false;
 
   @override
@@ -71,12 +72,15 @@ class _EquipmentFormScreenState extends State<EquipmentFormScreen> {
         imageQuality: 85,
       );
       if (pickedFile != null) {
+        final bytes = await pickedFile.readAsBytes();
+        if (!mounted) return;
         setState(() {
-          _selectedImage = File(pickedFile.path);
+          _selectedImage = pickedFile;
+          _selectedImageBytes = bytes;
         });
       }
     } catch (e) {
-      _showError('ไม่สามารถเลือกรูปภาพได้: \$e');
+      _showError('ไม่สามารถเลือกรูปภาพได้: $e');
     }
   }
 
@@ -142,7 +146,7 @@ class _EquipmentFormScreenState extends State<EquipmentFormScreen> {
           _showError('บันทึกข้อมูลไม่สำเร็จ');
         }
       } catch (e) {
-        _showError('เกิดข้อผิดพลาด: \$e');
+        _showError('เกิดข้อผิดพลาด: $e');
       } finally {
         setState(() => _isLoading = false);
       }
@@ -180,8 +184,8 @@ class _EquipmentFormScreenState extends State<EquipmentFormScreen> {
                       child: _selectedImage != null
                           ? ClipRRect(
                               borderRadius: BorderRadius.circular(12),
-                              child: Image.file(
-                                _selectedImage!,
+                              child: Image.memory(
+                                _selectedImageBytes!,
                                 fit: BoxFit.cover,
                               ),
                             )
@@ -192,7 +196,7 @@ class _EquipmentFormScreenState extends State<EquipmentFormScreen> {
                               child: Image.network(
                                 widget.equipment!.imageUrl!.startsWith('http')
                                     ? widget.equipment!.imageUrl!
-                                    : '\${ApiRepository.baseUrl}/\${widget.equipment!.imageUrl}',
+                                    : '${ApiRepository.serverUrl}${widget.equipment!.imageUrl!.startsWith('/') ? '' : '/'}${widget.equipment!.imageUrl}',
                                 fit: BoxFit.cover,
                                 errorBuilder: (context, error, stackTrace) =>
                                     const Icon(
@@ -277,7 +281,7 @@ class _EquipmentFormScreenState extends State<EquipmentFormScreen> {
                 onSaved: (val) => _deposit = double.parse(val!),
               ),
               DropdownButtonFormField<String>(
-                value: _status,
+                initialValue: _status,
                 decoration: const InputDecoration(labelText: 'สถานะอุปกรณ์'),
                 items: const [
                   DropdownMenuItem(
