@@ -3,9 +3,9 @@ import 'package:flutter/material.dart';
 import '../../core/models.dart';
 import 'screens/admin_pending_borrow_screen.dart';
 import 'screens/admin_delivery_return_screen.dart';
+import 'screens/admin_equipment_screen.dart';
 import 'screens/admin_pending_slip_screen.dart';
 import 'screens/category_form_screen.dart';
-import 'screens/equipment_form_screen.dart';
 
 /// Admin menu (Editor 2's screens). Replaces the old AdminHomeStub.
 class AdminHome extends StatelessWidget {
@@ -36,8 +36,8 @@ class AdminHome extends StatelessWidget {
           Text('สวัสดี ${user.fullName}', style: const TextStyle(fontSize: 16)),
           const SizedBox(height: 16),
           FilledButton(
-            onPressed: () => _open(context, const EquipmentFormScreen()),
-            child: const Text('เพิ่ม/แก้ไขอุปกรณ์ (พร้อมรูปภาพ)'),
+            onPressed: () => _open(context, const AdminEquipmentScreen()),
+            child: const Text('จัดการอุปกรณ์'),
           ),
           const SizedBox(height: 12),
           FilledButton(
