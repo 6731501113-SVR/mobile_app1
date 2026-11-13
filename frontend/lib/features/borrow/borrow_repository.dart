@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import '../../core/api_client.dart';
 import '../../core/dates.dart';
@@ -21,6 +22,12 @@ abstract class BorrowRepository {
 
   Future<BorrowRequest> fetchOne(int id);
   Future<BorrowRequest> cancel(int id);
+  Future<void> uploadSlip({
+    required int requestId,
+    required String fileName,
+    required Uint8List bytes,
+    String? mimeType,
+  });
 }
 
 class ApiBorrowRepository implements BorrowRepository {
@@ -204,5 +211,31 @@ class ApiBorrowRepository implements BorrowRepository {
   Future<BorrowRequest> cancel(int id) async {
     await _api.put('/api/borrows/$id/cancel');
     return fetchOne(id);
+  }
+
+  @override
+  Future<void> uploadSlip({
+    required int requestId,
+    required String fileName,
+    required Uint8List bytes,
+    String? mimeType,
+  }) async {
+    final contentType = _slipContentType(fileName, mimeType);
+    await _api.putMultipart(
+      '/api/borrows/$requestId/slip',
+      fieldName: 'slip',
+      fileName: fileName,
+      bytes: bytes,
+      contentType: contentType,
+    );
+  }
+
+  String _slipContentType(String fileName, String? mimeType) {
+    if (mimeType == 'image/jpeg' || mimeType == 'image/png') return mimeType!;
+    return switch (fileName.toLowerCase().split('.').last) {
+      'jpg' || 'jpeg' => 'image/jpeg',
+      'png' => 'image/png',
+      _ => throw FormatException('Unsupported payment slip image: $fileName'),
+    };
   }
 }

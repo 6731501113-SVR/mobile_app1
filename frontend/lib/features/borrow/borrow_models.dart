@@ -98,8 +98,8 @@ class BorrowRequest {
   /// Approved by admin and waiting for the renter to pay (show "ชำระเงิน").
   bool get awaitingPayment =>
       status == RequestStatus.approved &&
-      paymentDueAt != null &&
-      (paymentStatus == 'unpaid' || paymentStatus == 'rejected');
+      (paymentStatus == 'unpaid' || paymentStatus == 'rejected') &&
+      (paymentDueAt == null || !DateTime.now().isAfter(paymentDueAt!));
 
   bool get hasFine => status == RequestStatus.returned && fineAmount > 0;
   bool get hasUnpaidFine => hasFine && !finePaid;

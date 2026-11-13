@@ -1,6 +1,8 @@
 class BorrowRequest {
   final int id;
   final int userId;
+  final String userName;
+  final int itemCount;
   final String purpose;
   final String startDate;
   final String endDate;
@@ -15,6 +17,8 @@ class BorrowRequest {
   BorrowRequest({
     required this.id,
     required this.userId,
+    this.userName = '',
+    this.itemCount = 1,
     required this.purpose,
     required this.startDate,
     required this.endDate,
@@ -31,6 +35,10 @@ class BorrowRequest {
     return BorrowRequest(
       id: json['id'] is int ? json['id'] : int.parse(json['id'].toString()),
       userId: json['user_id'] is int ? json['user_id'] : int.parse(json['user_id'].toString()),
+      userName: json['user_name'] as String? ?? '',
+      itemCount: json['item_count'] is int
+          ? json['item_count'] as int
+          : int.tryParse('${json['item_count']}') ?? 1,
       purpose: json['purpose'] ?? '',
       startDate: json['start_date'] ?? '',
       endDate: json['end_date'] ?? '',

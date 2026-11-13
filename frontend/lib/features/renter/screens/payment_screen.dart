@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../../core/api_client.dart';
 import '../controllers/gallery_slip_picker.dart';
 import '../controllers/payment_controller.dart';
 import '../models/borrow_request.dart';
@@ -15,12 +16,16 @@ import '../mock/app_store.dart' show requestTitle;
 /// หน้านี้มีหน้าที่แสดงผลเท่านั้น การเลือกสลิป ตรวจไฟล์ ส่งสลิป และนับเวลาที่เหลือ
 /// อยู่ใน PaymentController (controllers/payment_controller.dart)
 ///  - ต้องชำระภายในเวลาที่กำหนดหลังอนุมัติ ไม่งั้นระบบยกเลิกอัตโนมัติ (นับถอยหลังในหน้านี้)
-///  - ปุ่มแนบสลิปเปิดแกลเลอรีจริงด้วย image_picker รับเฉพาะ JPG/PNG ไม่เกิน 5 MB
-///    (ตอนต่อ backend: อัปโหลดรูปไปที่ /api/upload แล้วส่ง path ที่ได้ให้ AppStore.submitSlip)
+///  - ปุ่มแนบสลิปเปิดแกลเลอรีจริงด้วย image_picker แล้วส่งไฟล์ให้ backend ตรวจสอบ
 class PaymentScreen extends StatefulWidget {
   final BorrowRequest request;
+  final Future<void> Function(PickedSlip slip) onSubmitSlip;
 
-  const PaymentScreen({super.key, required this.request});
+  const PaymentScreen({
+    super.key,
+    required this.request,
+    required this.onSubmitSlip,
+  });
 
   @override
   State<PaymentScreen> createState() => _PaymentScreenState();
@@ -35,7 +40,11 @@ class _PaymentScreenState extends State<PaymentScreen> {
   @override
   void initState() {
     super.initState();
-    _c = PaymentController(request: widget.request, picker: GallerySlipPicker());
+    _c = PaymentController(
+      request: widget.request,
+      picker: GallerySlipPicker(),
+      submitSlip: widget.onSubmitSlip,
+    );
     _ticker = Timer.periodic(const Duration(seconds: 30), (_) => _c.refresh());
   }
 
@@ -55,16 +64,24 @@ class _PaymentScreenState extends State<PaymentScreen> {
     if (error != null && mounted) _snack(error);
   }
 
-  void _submit() {
-    if (!_c.send()) {
-      _snack('ส่งสลิปไม่ได้ ใบนี้ชำระแล้ว อยู่ระหว่างตรวจ หรือหมดเวลาชำระ');
-      return;
+  Future<void> _submit() async {
+    try {
+      final sent = await _c.send();
+      if (!mounted) return;
+      if (!sent) {
+        _snack('ส่งสลิปไม่ได้ ใบนี้ชำระแล้ว อยู่ระหว่างตรวจ หรือหมดเวลาชำระ');
+        return;
+      }
+      final messenger = ScaffoldMessenger.of(context);
+      Navigator.of(context).pop(true);
+      messenger.showSnackBar(
+        const SnackBar(content: Text('ส่งสลิปแล้ว รอผู้ดูแลตรวจสอบ')),
+      );
+    } on ApiException catch (error) {
+      if (mounted) _snack(error.message);
+    } catch (error) {
+      if (mounted) _snack('ส่งสลิปไม่สำเร็จ: $error');
     }
-    final messenger = ScaffoldMessenger.of(context);
-    Navigator.of(context).pop(true);
-    messenger.showSnackBar(
-      const SnackBar(content: Text('ส่งสลิปแล้ว รอผู้ดูแลตรวจสอบ')),
-    );
   }
 
   @override
@@ -94,7 +111,13 @@ class _PaymentScreenState extends State<PaymentScreen> {
                     top: false,
                     child: FilledButton(
                       onPressed: _c.canSend ? _submit : null,
-                      child: Text('ส่งสลิป ${baht(_r.amountDue)}'),
+                      child: _c.isSending
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : Text('ส่งสลิป ${baht(_r.amountDue)}'),
                     ),
                   ),
                 )
@@ -243,7 +266,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
           ],
           OutlinedButton.icon(
             style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(44)),
-            onPressed: _pickSlip,
+            onPressed: _c.isSending ? null : _pickSlip,
             icon: const Icon(Icons.attach_file),
             label: Text(_c.slipName == null
                 ? 'แนบสลิปการโอน'

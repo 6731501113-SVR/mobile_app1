@@ -127,13 +127,23 @@ class _MyRequestsViewState extends State<MyRequestsView> {
         builder: (_) => FineScreen(request: toRenterRequest(r)),
       ),
     );
-    if (mounted) _load(spinner: false); // admin may have marked it paid meanwhile
+    if (mounted) {
+      _load(spinner: false); // admin may have marked it paid meanwhile
+    }
   }
 
   Future<void> _openPayment(BorrowRequest r) async {
     await Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => PaymentScreen(request: toRenterRequest(r)),
+        builder: (_) => PaymentScreen(
+          request: toRenterRequest(r),
+          onSubmitSlip: (slip) => widget.repo.uploadSlip(
+            requestId: r.id,
+            fileName: slip.name,
+            bytes: slip.bytes,
+            mimeType: slip.mimeType,
+          ),
+        ),
       ),
     );
     if (mounted) _load(spinner: false);
@@ -221,7 +231,7 @@ class _MyRequestsViewState extends State<MyRequestsView> {
               physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
               itemCount: _items.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 12),
+              separatorBuilder: (_, _) => const SizedBox(height: 12),
               itemBuilder: (_, i) => _RequestCard(
                 request: _items[i],
                 onCancel: () => _cancel(_items[i]),

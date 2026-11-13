@@ -1,8 +1,5 @@
-import 'dart:typed_data';
-
 import 'package:flutter/foundation.dart';
 
-import '../mock/app_store.dart';
 import '../models/borrow_request.dart';
 import '../utils/rental_calculator.dart';
 import '../utils/slip_utils.dart';
@@ -27,27 +24,28 @@ abstract class SlipPicker {
 class PaymentController extends ChangeNotifier {
   PaymentController({
     required this.request,
-    required SlipPicker picker,
-    AppStore? store,
+    required this.picker,
+    required this.submitSlip,
     DateTime Function()? now,
-  })  : _picker = picker,
-        _store = store ?? AppStore.instance,
-        _now = now ?? DateTime.now;
+  }) : _now = now ?? DateTime.now;
 
   final BorrowRequest request;
-  final SlipPicker _picker;
-  final AppStore _store;
+  final SlipPicker picker;
+  final Future<void> Function(PickedSlip slip) submitSlip;
   final DateTime Function() _now;
 
   String? _slipName;
   Uint8List? _slipBytes;
+  String? _mimeType;
+  bool _sending = false;
 
   String? get slipName => _slipName;
   Uint8List? get slipBytes => _slipBytes;
   bool get hasSlip => _slipBytes != null;
+  bool get isSending => _sending;
 
   /// กดส่งสลิปได้เมื่อใบยังจ่ายได้ และเลือกรูปแล้ว
-  bool get canSend => request.canPay && hasSlip;
+  bool get canSend => request.canPay && hasSlip && !_sending;
 
   /// เวลาที่เหลือก่อนครบกำหนดชำระ (null ถ้าไม่มีกำหนด หรือจ่ายไม่ได้แล้ว)
   Duration? get timeLeftToPay {
@@ -65,12 +63,17 @@ class PaymentController extends ChangeNotifier {
   /// เลือกรูปสลิป คืนข้อความ error ถ้าไฟล์ไม่ผ่าน หรือ null ถ้าผ่าน/ผู้ใช้ยกเลิก
   Future<String?> pickSlip() async {
     try {
-      final file = await _picker.pick();
+      final file = await picker.pick();
       if (file == null) return null;
-      final error = slipError(file.name, file.bytes.length, mimeType: file.mimeType);
+      final error = slipError(
+        file.name,
+        file.bytes.length,
+        mimeType: file.mimeType,
+      );
       if (error != null) return error;
       _slipName = file.name;
       _slipBytes = file.bytes;
+      _mimeType = file.mimeType;
       notifyListeners();
       return null;
     } catch (_) {
@@ -79,14 +82,23 @@ class PaymentController extends ChangeNotifier {
   }
 
   /// ส่งสลิป คืน false ถ้าส่งไม่ได้ (ยังไม่เลือกรูป / ชำระแล้ว / รอตรวจ / หมดเวลา)
-  bool send() {
+  Future<bool> send() async {
     if (!canSend) return false;
-    return _store.submitSlip(request, _slipName!, bytes: _slipBytes);
+    _sending = true;
+    notifyListeners();
+    try {
+      await submitSlip(
+        PickedSlip(name: _slipName!, bytes: _slipBytes!, mimeType: _mimeType),
+      );
+      return true;
+    } finally {
+      _sending = false;
+      notifyListeners();
+    }
   }
 
-  /// ให้หน้าจอเรียกเป็นระยะ: ยกเลิกใบที่หมดเวลา แล้วแจ้งให้รีเฟรช
+  /// ให้หน้าจอเรียกเป็นระยะเพื่ออัปเดตเวลาที่เหลือ
   void refresh() {
-    _store.sweepExpired();
     notifyListeners();
   }
 }

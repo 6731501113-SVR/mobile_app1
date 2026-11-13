@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 
 /// Base URL of the backend. Override at build/run time:
 ///   flutter run --dart-define=API_BASE_URL=http://192.168.1.20:3000
@@ -54,26 +56,32 @@ class ApiClient {
   Future<dynamic> patch(String path, {Object? body}) =>
       _send('PATCH', path, body: body ?? const <String, dynamic>{});
 
-  Future<dynamic> _send(
-    String method,
+  Future<dynamic> putMultipart(
     String path, {
-    Map<String, String>? query,
-    Object? body,
+    required String fieldName,
+    required String fileName,
+    required Uint8List bytes,
+    required String contentType,
   }) async {
-    var uri = Uri.parse('$_baseUrl$path');
-    if (query != null && query.isNotEmpty) uri = uri.replace(queryParameters: query);
-
-    final request = http.Request(method, uri)
-      ..headers['accept'] = 'application/json'
-      ..headers['content-type'] = 'application/json; charset=utf-8';
+    final request = http.MultipartRequest('PUT', Uri.parse('$_baseUrl$path'))
+      ..headers['accept'] = 'application/json';
     final sentToken = token;
-    if (sentToken != null) request.headers['authorization'] = 'Bearer $sentToken';
-    if (body != null) request.body = jsonEncode(body);
+    if (sentToken != null) {
+      request.headers['authorization'] = 'Bearer $sentToken';
+    }
+    request.files.add(
+      http.MultipartFile.fromBytes(
+        fieldName,
+        bytes,
+        filename: fileName,
+        contentType: MediaType.parse(contentType),
+      ),
+    );
 
-    final http.Response res;
+    final http.Response response;
     try {
       final streamed = await _http.send(request).timeout(const Duration(seconds: 15));
-      res = await http.Response.fromStream(streamed);
+      response = await http.Response.fromStream(streamed);
     } on TimeoutException {
       throw const ApiException('เซิร์ฟเวอร์ตอบสนองช้าเกินไป กรุณาลองอีกครั้ง', code: 'NETWORK');
     } on http.ClientException {
@@ -83,30 +91,79 @@ class ApiClient {
       );
     }
 
+    return _decodeResponse(response, sentToken);
+  }
+
+  Future<dynamic> _send(
+    String method,
+    String path, {
+    Map<String, String>? query,
+    Object? body,
+  }) async {
+    var uri = Uri.parse('$_baseUrl$path');
+    if (query != null && query.isNotEmpty) {
+      uri = uri.replace(queryParameters: query);
+    }
+
+    final request = http.Request(method, uri)
+      ..headers['accept'] = 'application/json'
+      ..headers['content-type'] = 'application/json; charset=utf-8';
+    final sentToken = token;
+    if (sentToken != null) {
+      request.headers['authorization'] = 'Bearer $sentToken';
+    }
+    if (body != null) {
+      request.body = jsonEncode(body);
+    }
+
+    final http.Response res;
+    try {
+      final streamed = await _http
+          .send(request)
+          .timeout(const Duration(seconds: 15));
+      res = await http.Response.fromStream(streamed);
+    } on TimeoutException {
+      throw const ApiException(
+        'เซิร์ฟเวอร์ตอบสนองช้าเกินไป กรุณาลองอีกครั้ง',
+        code: 'NETWORK',
+      );
+    } on http.ClientException {
+      throw const ApiException(
+        'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ กรุณาตรวจสอบอินเทอร์เน็ต',
+        code: 'NETWORK',
+      );
+    }
+
+    return _decodeResponse(res, sentToken);
+  }
+
+  dynamic _decodeResponse(http.Response response, String? sentToken) {
     dynamic json;
-    if (res.bodyBytes.isNotEmpty) {
+    if (response.bodyBytes.isNotEmpty) {
       try {
-        json = jsonDecode(utf8.decode(res.bodyBytes));
+        json = jsonDecode(utf8.decode(response.bodyBytes));
       } catch (_) {
         json = null;
       }
     }
 
-    if (res.statusCode >= 200 && res.statusCode < 300) return json;
+    if (response.statusCode >= 200 && response.statusCode < 300) return json;
 
-    String code = 'HTTP_${res.statusCode}';
-    String message = 'เกิดข้อผิดพลาด (${res.statusCode})';
+    String code = 'HTTP_${response.statusCode}';
+    String message = 'เกิดข้อผิดพลาด (${response.statusCode})';
     Object? details;
     if (json is Map && json['error'] is Map) {
       final err = json['error'] as Map;
       code = (err['code'] as String?) ?? code;
       message = (err['message'] as String?) ?? message;
       details = err['details'];
+    } else if (json is Map && json['message'] is String) {
+      message = json['message'] as String;
     }
 
     // Only treat as "session expired" when we actually sent a token.
-    if (res.statusCode == 401 && sentToken != null) onUnauthorized?.call();
+    if (response.statusCode == 401 && sentToken != null) onUnauthorized?.call();
 
-    throw ApiException(message, code: code, status: res.statusCode, details: details);
+    throw ApiException(message, code: code, status: response.statusCode, details: details);
   }
 }

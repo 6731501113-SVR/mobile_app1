@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/models.dart';
+import 'screens/admin_pending_borrow_screen.dart';
 import 'screens/admin_pending_slip_screen.dart';
 import 'screens/category_form_screen.dart';
 import 'screens/delivery_return_screen.dart';
@@ -42,6 +43,11 @@ class AdminHome extends StatelessWidget {
           FilledButton(
             onPressed: () => _open(context, const CategoryFormScreen()),
             child: const Text('เพิ่มหมวดหมู่'),
+          ),
+          const SizedBox(height: 12),
+          FilledButton(
+            onPressed: () => _open(context, const AdminPendingBorrowScreen()),
+            child: const Text('อนุมัติคำขอเช่า'),
           ),
           const SizedBox(height: 12),
           FilledButton(

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -45,8 +46,18 @@ BorrowRequest _approved({DateTime? dueAt}) => BorrowRequest(
       borrowerId: 'user123',
     );
 
-PaymentController _controller(BorrowRequest r, SlipPicker picker, {DateTime Function()? now}) =>
-    PaymentController(request: r, picker: picker, now: now);
+PaymentController _controller(
+  BorrowRequest r,
+  SlipPicker picker, {
+  DateTime Function()? now,
+  Future<void> Function(PickedSlip slip)? submitSlip,
+}) =>
+    PaymentController(
+      request: r,
+      picker: picker,
+      now: now,
+      submitSlip: submitSlip ?? (_) async {},
+    );
 
 void main() {
   group('เลือกสลิป', () {
@@ -90,30 +101,40 @@ void main() {
   });
 
   group('ส่งสลิป', () {
-    test('ส่งสำเร็จ: สถานะเป็นรอตรวจ และเก็บสลิปไว้ที่ใบ', () async {
-      final r = _approved();
-      final c = _controller(r, FakePicker(_png()));
+    test('ส่งไฟล์ที่เลือกไปยังตัวส่ง backend', () async {
+      final submitted = <PickedSlip>[];
+      final c = _controller(
+        _approved(),
+        FakePicker(_png()),
+        submitSlip: (slip) async => submitted.add(slip),
+      );
       await c.pickSlip();
 
-      expect(c.send(), isTrue);
-      expect(r.paymentStatus, PaymentStatus.pendingReview);
-      expect(r.slipPath, 'slip.png');
-      expect(r.slipBytes, isNotNull);
+      expect(await c.send(), isTrue);
+      expect(submitted.single.name, 'slip.png');
+      expect(submitted.single.mimeType, 'image/png');
+      expect(submitted.single.bytes, isNotEmpty);
     });
 
-    test('ยังไม่เลือกรูป = ส่งไม่ได้', () {
-      final r = _approved();
-      final c = _controller(r, FakePicker(_png()));
-      expect(c.send(), isFalse);
-      expect(r.paymentStatus, PaymentStatus.unpaid);
+    test('ยังไม่เลือกรูป = ส่งไม่ได้', () async {
+      final c = _controller(_approved(), FakePicker(_png()));
+      expect(await c.send(), isFalse);
     });
 
-    test('ส่งซ้ำตอนรอตรวจอยู่ = ไม่ได้', () async {
-      final r = _approved();
-      final c = _controller(r, FakePicker(_png()));
+    test('ขณะส่งอยู่ ป้องกันการส่งซ้ำ', () async {
+      final gate = Completer<void>();
+      final c = _controller(
+        _approved(),
+        FakePicker(_png()),
+        submitSlip: (_) => gate.future,
+      );
       await c.pickSlip();
-      expect(c.send(), isTrue);
-      expect(c.send(), isFalse); // ใบอยู่ระหว่างตรวจแล้ว จ่ายซ้ำไม่ได้
+      final pendingSend = c.send();
+      expect(c.isSending, isTrue);
+      expect(await c.send(), isFalse);
+      gate.complete();
+      expect(await pendingSend, isTrue);
+      expect(c.isSending, isFalse);
     });
 
     test('ใบยังไม่อนุมัติ = ส่งไม่ได้', () async {
@@ -121,7 +142,7 @@ void main() {
       final c = _controller(r, FakePicker(_png()));
       await c.pickSlip();
       expect(c.canSend, isFalse);
-      expect(c.send(), isFalse);
+      expect(await c.send(), isFalse);
     });
 
     test('เลยกำหนดชำระแล้ว = ส่งไม่ได้', () async {
@@ -129,7 +150,7 @@ void main() {
       final c = _controller(r, FakePicker(_png()));
       await c.pickSlip();
       expect(c.canSend, isFalse);
-      expect(c.send(), isFalse);
+      expect(await c.send(), isFalse);
     });
   });
 

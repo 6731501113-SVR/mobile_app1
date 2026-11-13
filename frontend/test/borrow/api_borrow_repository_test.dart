@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:frontend/core/api_client.dart';
 import 'package:frontend/features/borrow/borrow_models.dart';
@@ -8,6 +9,96 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 void main() {
+  test(
+    'uploadSlip uses the authenticated backend multipart endpoint',
+    () async {
+      http.Request? sent;
+      final api = ApiClient(
+        baseUrl: 'http://test',
+        client: MockClient((request) async {
+          sent = request;
+          return http.Response(
+            jsonEncode({'success': true, 'slip_url': '/uploads/slip-test.png'}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }),
+      )..token = 'user-token';
+
+      await ApiBorrowRepository(api).uploadSlip(
+        requestId: 42,
+        fileName: 'slip.png',
+        bytes: Uint8List.fromList([1, 2, 3]),
+        mimeType: 'image/png',
+      );
+
+      final request = sent!;
+      expect(request.method, 'PUT');
+      expect(request.url.path, '/api/borrows/42/slip');
+      expect(request.headers['authorization'], 'Bearer user-token');
+      expect(
+        request.headers['content-type'],
+        startsWith('multipart/form-data;'),
+      );
+      expect(request.body, contains('name="slip"'));
+      expect(request.body, contains('filename="slip.png"'));
+      expect(request.body, contains('image/png'));
+    },
+  );
+
+  test('uploadSlip exposes backend upload errors', () async {
+    final api = ApiClient(
+      baseUrl: 'http://test',
+      client: MockClient(
+        (_) async => http.Response(
+          jsonEncode({
+            'success': false,
+            'message': 'Only image files are allowed',
+          }),
+          400,
+          headers: {'content-type': 'application/json'},
+        ),
+      ),
+    )..token = 'user-token';
+
+    await expectLater(
+      ApiBorrowRepository(api).uploadSlip(
+        requestId: 42,
+        fileName: 'slip.png',
+        bytes: Uint8List.fromList([1, 2, 3]),
+        mimeType: 'image/png',
+      ),
+      throwsA(
+        isA<ApiException>().having(
+          (error) => error.message,
+          'message',
+          'Only image files are allowed',
+        ),
+      ),
+    );
+  });
+
+  test('approved request without a payment deadline still offers payment', () {
+    final request = BorrowRequest(
+      id: 42,
+      equipmentId: 3,
+      equipmentName: 'Camera',
+      assetCode: 'CAM-01',
+      purpose: 'Class project',
+      startDate: DateTime(2026, 11, 20),
+      endDate: DateTime(2026, 11, 22),
+      status: RequestStatus.approved,
+      lateDays: 0,
+      fineAmount: 0,
+      finePaid: false,
+      estimatedFine: 0,
+      finePerDay: 30,
+      paymentStatus: 'unpaid',
+    );
+
+    expect(request.awaitingPayment, isTrue);
+  });
+
   test('fetchMine parses the backend borrow request and nested equipment items', () async {
     final payload = [
       {

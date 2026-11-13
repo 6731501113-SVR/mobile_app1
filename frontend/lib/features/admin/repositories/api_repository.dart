@@ -21,6 +21,14 @@ class ApiRepository {
     if (client?.token != null) 'Authorization': 'Bearer ${client!.token}',
   };
 
+  ApiClient get _authenticatedClient {
+    final api = client;
+    if (api == null) {
+      throw StateError('ApiRepository.client has not been configured');
+    }
+    return api;
+  }
+
   // --- Equipment APIs ---
   Future<List<Equipment>> getEquipmentList() async {
     final response = await http.get(
@@ -161,6 +169,37 @@ class ApiRepository {
   }
 
   // --- Slip & Borrow Request APIs ---
+  Future<List<BorrowRequest>> getPendingBorrowRequests() async {
+    final decoded = await _authenticatedClient.get(
+      '/api/borrows',
+      query: {'status': 'pending'},
+    );
+    if (decoded is! List) {
+      throw const FormatException('Invalid pending borrow requests response');
+    }
+    return decoded.map((row) {
+      if (row is! Map) {
+        throw const FormatException('Invalid pending borrow request');
+      }
+      return BorrowRequest.fromJson(Map<String, dynamic>.from(row));
+    }).toList();
+  }
+
+  Future<void> reviewBorrowRequest(
+    int requestId, {
+    required bool approve,
+    String? adminNote,
+  }) async {
+    await _authenticatedClient.put(
+      '/api/borrows/$requestId/approve',
+      body: {
+        'status': approve ? 'approved' : 'rejected',
+        if (adminNote != null && adminNote.trim().isNotEmpty)
+          'admin_note': adminNote.trim(),
+      },
+    );
+  }
+
   Future<List<BorrowRequest>> getPendingSlips() async {
     final response = await http.get(
       Uri.parse('$baseUrl/borrows').replace(queryParameters: {'status': 'approved'}),
