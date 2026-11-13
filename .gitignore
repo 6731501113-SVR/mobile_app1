@@ -1,6 +1,7 @@
 /docker-compose.yml
 
 node_modules/
+backend/uploads/*
 .env
 *.log
 
