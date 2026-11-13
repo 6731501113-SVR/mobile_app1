@@ -90,20 +90,13 @@ class ApiAuthRepository implements AuthRepository {
     }
 
     try {
-      Map<String, dynamic> j;
-      try {
-        j = await _api.get('/api/users/$userId') as Map<String, dynamic>;
-      } on ApiException catch (e) {
-        if (e.status == 404) {
-          j = await _api.get('/api/auth/me') as Map<String, dynamic>;
-        } else {
-          rethrow;
-        }
-      }
+      // The backend has no /auth/me; the owner may read GET /api/users/:id.
+      final j = await _api.get('/api/users/$userId') as Map<String, dynamic>;
       final raw = (j['data'] ?? j['user']) as Map<String, dynamic>;
       return _fromBackendData(raw);
     } on ApiException catch (e) {
-      if (e.status == 401) {
+      // 401/403: token no longer valid. 404: the account was deleted.
+      if (e.status == 401 || e.status == 403 || e.status == 404) {
         await logout();
         return null;
       }

@@ -283,20 +283,23 @@ class _EquipmentFormScreenState extends State<EquipmentFormScreen> {
               DropdownButtonFormField<String>(
                 initialValue: _status,
                 decoration: const InputDecoration(labelText: 'สถานะอุปกรณ์'),
-                items: const [
-                  DropdownMenuItem(
+                items: [
+                  const DropdownMenuItem(
                     value: 'available',
                     child: Text('พร้อมใช้งาน (Available)'),
                   ),
-                  DropdownMenuItem(
-                    value: 'borrowed',
-                    child: Text('ถูกยืม (Borrowed)'),
-                  ),
-                  DropdownMenuItem(
+                  // Only the borrow flow can set 'borrowed'; keep it visible
+                  // (read-only) while editing an item that is currently out.
+                  if (_status == 'borrowed')
+                    const DropdownMenuItem(
+                      value: 'borrowed',
+                      child: Text('ถูกยืม (Borrowed)'),
+                    ),
+                  const DropdownMenuItem(
                     value: 'maintenance',
                     child: Text('กำลังซ่อมบำรุง (Maintenance)'),
                   ),
-                  DropdownMenuItem(value: 'lost', child: Text('สูญหาย (Lost)')),
+                  const DropdownMenuItem(value: 'lost', child: Text('สูญหาย (Lost)')),
                 ],
                 onChanged: (val) => setState(() => _status = val!),
               ),

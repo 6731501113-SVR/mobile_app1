@@ -124,6 +124,16 @@ exports.uploadSlip = cleanupOnError(async (req, res) => {
     if (!req.file) {
         throw new HttpError(400, { success: false, message: 'Payment slip image is required.' });
     }
+    // รับสลิปได้เฉพาะใบที่อนุมัติแล้ว ยังไม่จ่าย และยังไม่เลยกำหนดชำระ
+    if (borrow.status !== 'approved') {
+        throw new HttpError(400, { success: false, message: 'A slip can only be uploaded for an approved request.' });
+    }
+    if (borrow.payment_status === 'paid') {
+        throw new HttpError(400, { success: false, message: 'This request is already paid.' });
+    }
+    if (borrow.payment_due_at && new Date(borrow.payment_due_at) < new Date()) {
+        throw new HttpError(400, { success: false, message: 'The payment deadline has passed.' });
+    }
 
     const slipUrl = `/uploads/${req.file.filename}`;
     await borrowModel.setSlip(borrow.id, slipUrl);
@@ -144,6 +154,12 @@ exports.verifyPayment = async (req, res) => {
     }
     const borrow = await borrowModel.findRequestById(req.params.id);
     if (!borrow) throw new HttpError(404, { success: false, message: 'Borrow request not found.' });
+    if (borrow.status !== 'approved') {
+        throw new HttpError(400, { success: false, message: 'Payment can only be verified for an approved request.' });
+    }
+    if (!borrow.slip_url) {
+        throw new HttpError(400, { success: false, message: 'No payment slip has been uploaded yet.' });
+    }
 
     await borrowModel.setPaymentStatus(borrow.id, payment_status, admin_note || null);
     res.json({ success: true, message: `Payment status updated to '${payment_status}' successfully.` });
@@ -156,6 +172,10 @@ exports.approve = async (req, res) => {
 
     if (!['approved', 'rejected'].includes(status)) {
         throw new HttpError(400, { message: 'status must be "approved" or "rejected"' });
+    }
+    const hours = Number(payment_hours);
+    if (!Number.isInteger(hours) || hours < 1 || hours > 168) {
+        throw new HttpError(400, { message: 'payment_hours must be a whole number between 1 and 168' });
     }
 
     const borrow = await borrowModel.findRequestById(req.params.id);
@@ -171,10 +191,10 @@ exports.approve = async (req, res) => {
     }
 
     // อนุมัติ: เซ็ตเวลาครบกำหนด 24 ชม. โดยยังไม่ล็อกสถานะอุปกรณ์ (ให้อุปกรณ์ไปล็อกตอน Handover)
-    const ok = await borrowModel.setApproved(borrow.id, adminId, admin_note || null, payment_hours);
+    const ok = await borrowModel.setApproved(borrow.id, adminId, admin_note || null, hours);
     if (!ok) throw new HttpError(409, { message: 'Request status changed, please retry' });
 
-    res.json({ message: 'Borrow request approved with 24-hour payment deadline' });
+    res.json({ message: `Borrow request approved with ${hours}-hour payment deadline` });
 };
 
 // 🌟 PUT /api/borrows/:id/handover (Admin) ส่งมอบ: เช็กว่าจ่ายเงินแล้ว (paid) และเปลี่ยนสถานะอุปกรณ์เป็น borrowed

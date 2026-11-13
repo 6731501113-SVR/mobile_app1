@@ -41,12 +41,10 @@ class ApiRepository {
           .map((model) => Equipment.fromJson(model))
           .toList();
 
-      // จัดเรียง: สินค้าที่มีสต็อกเหลือ (stock > 0) ขึ้นมาแสดงอยู่ด้านบนสุด
-      equipments.sort((a, b) {
-        if (a.stock > 0 && b.stock == 0) return -1;
-        if (a.stock == 0 && b.stock > 0) return 1;
-        return b.stock.compareTo(a.stock);
-      });
+      // The backend keeps one row per physical item (no stock column), so
+      // sort by availability instead: available items first.
+      int rank(String status) => status == 'available' ? 0 : 1;
+      equipments.sort((a, b) => rank(a.status).compareTo(rank(b.status)));
 
       return equipments;
     } else {
@@ -128,7 +126,7 @@ class ApiRepository {
       try {
         final body = json.decode(response.body);
         if (body is Map && body['message'] is String) {
-          message = body['message'] as String;
+          message = translateBackendMessage(body['message'] as String).message;
         }
       } on FormatException {
         // Keep the HTTP status message when the server response is not JSON.
@@ -274,7 +272,7 @@ class ApiRepository {
     try {
       final body = json.decode(response.body);
       if (body is Map && body['message'] is String) {
-        return body['message'] as String;
+        return translateBackendMessage(body['message'] as String).message;
       }
     } on FormatException {
       // Use the status-based message for non-JSON responses.

@@ -183,8 +183,18 @@ class ApiBorrowRepository implements BorrowRepository {
     if (userId == null) {
       throw const ApiException('กรุณาเข้าสู่ระบบก่อน', code: 'UNAUTHORIZED');
     }
-    return _list(await _api.get('/api/borrows/user/$userId'));
+    final all = _list(await _api.get('/api/borrows/user/$userId'));
+    return all.where((r) => _inTab(r.status, tab)).toList();
   }
+
+  static bool _inTab(RequestStatus s, String tab) => switch (tab) {
+        'pending' => s == RequestStatus.pending || s == RequestStatus.approved,
+        'borrowing' => s == RequestStatus.borrowing || s == RequestStatus.overdue,
+        'history' => s == RequestStatus.returned ||
+            s == RequestStatus.rejected ||
+            s == RequestStatus.cancelled,
+        _ => true,
+      };
 
   @override
   Future<List<DateRange>> fetchBookedRanges(int equipmentId) async {

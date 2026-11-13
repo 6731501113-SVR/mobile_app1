@@ -69,11 +69,13 @@ void main() {
         mimeType: 'image/png',
       ),
       throwsA(
-        isA<ApiException>().having(
-          (error) => error.message,
-          'message',
-          'Only image files are allowed',
-        ),
+        isA<ApiException>()
+            .having((error) => error.code, 'code', 'BAD_FILE')
+            .having(
+              (error) => error.message,
+              'message',
+              'กรุณาแนบรูปภาพ (jpg, png, gif, webp)',
+            ),
       ),
     );
   });

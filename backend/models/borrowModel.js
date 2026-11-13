@@ -209,6 +209,7 @@ exports.cancelExpiredUnpaid = async () => {
                                  IF(admin_note IS NULL OR admin_note = '', '', CONCAT(' | ', admin_note)))
          WHERE status = 'approved'
            AND payment_status <> 'paid'
+           AND (payment_status = 'rejected' OR slip_url IS NULL)
            AND payment_due_at IS NOT NULL
            AND payment_due_at < NOW()`
     );

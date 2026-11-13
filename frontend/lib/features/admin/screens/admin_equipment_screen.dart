@@ -41,6 +41,14 @@ class _AdminEquipmentScreenState extends State<AdminEquipmentScreen> {
     return '${ApiRepository.serverUrl}${imageUrl.startsWith('/') ? '' : '/'}$imageUrl';
   }
 
+  static String _statusLabel(String status) => switch (status) {
+        'available' => 'พร้อมใช้งาน',
+        'borrowed' => 'ถูกยืม',
+        'maintenance' => 'ซ่อมบำรุง',
+        'lost' => 'สูญหาย',
+        _ => status,
+      };
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -105,7 +113,7 @@ class _AdminEquipmentScreenState extends State<AdminEquipmentScreen> {
                   title: Text(item.name),
                   subtitle: Text(
                     '${item.assetCode} · ${item.categoryName}\n'
-                    '${item.pricePerDay} บาท/วัน · มัดจำ ${item.deposit} บาท · คงเหลือ ${item.stock}',
+                    '${item.pricePerDay} บาท/วัน · มัดจำ ${item.deposit} บาท · ${_statusLabel(item.status)}',
                   ),
                   isThreeLine: true,
                   trailing: IconButton(
