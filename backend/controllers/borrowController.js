@@ -14,7 +14,8 @@ const isAdmin = (user) => user.role === 'admin';
 
 // GET /api/borrows (Admin) รองรับ ?status=
 exports.list = async (req, res) => {
-    res.json(await borrowModel.listAll(req.query.status));
+    const requests = await borrowModel.listAll(req.query.status);
+    res.json(await borrowModel.attachItems(requests));
 };
 
 // GET /api/borrows/user/:userId (เจ้าของหรือ Admin)
