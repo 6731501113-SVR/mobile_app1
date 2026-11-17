@@ -381,7 +381,7 @@ void main() {
       await tester.tap(_submitButton());
       await tester.pump();
 
-      expect(tester.widget<FilledButton>(_submitButton()).onPressed, isNull);
+      expect(tester.widget<FilledButton>(find.byType(FilledButton)).onPressed, isNull);
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
 
       repo.createGate!.complete();
