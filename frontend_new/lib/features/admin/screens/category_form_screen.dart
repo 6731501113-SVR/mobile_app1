@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import '../data/api_repository.dart';
 
 class CategoryFormScreen extends StatefulWidget {
-  const CategoryFormScreen({super.key});
+  const CategoryFormScreen({super.key, this.repository});
+
+  final ApiRepository? repository;
 
   @override
   State<CategoryFormScreen> createState() => _CategoryFormScreenState();
@@ -11,7 +13,7 @@ class CategoryFormScreen extends StatefulWidget {
 
 class _CategoryFormScreenState extends State<CategoryFormScreen> {
   final _formKey = GlobalKey<FormState>();
-  final ApiRepository _apiRepository = ApiRepository();
+  late final ApiRepository _apiRepository = widget.repository ?? ApiRepository();
   final TextEditingController _categoryNameController = TextEditingController();
   bool _isLoading = false;
 

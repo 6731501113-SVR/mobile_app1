@@ -8,8 +8,9 @@ import '../data/api_repository.dart';
 
 class EquipmentFormScreen extends StatefulWidget {
   final Equipment? equipment;
+  final ApiRepository? repository;
 
-  const EquipmentFormScreen({super.key, this.equipment});
+  const EquipmentFormScreen({super.key, this.equipment, this.repository});
 
   @override
   State<EquipmentFormScreen> createState() => _EquipmentFormScreenState();
@@ -17,7 +18,7 @@ class EquipmentFormScreen extends StatefulWidget {
 
 class _EquipmentFormScreenState extends State<EquipmentFormScreen> {
   final _formKey = GlobalKey<FormState>();
-  final ApiRepository _apiRepository = ApiRepository();
+  late final ApiRepository _apiRepository = widget.repository ?? ApiRepository();
   final ImagePicker _picker = ImagePicker();
 
   late String _assetCode;

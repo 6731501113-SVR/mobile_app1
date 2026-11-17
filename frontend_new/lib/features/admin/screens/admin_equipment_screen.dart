@@ -5,14 +5,16 @@ import '../data/api_repository.dart';
 import 'equipment_form_screen.dart';
 
 class AdminEquipmentScreen extends StatefulWidget {
-  const AdminEquipmentScreen({super.key});
+  const AdminEquipmentScreen({super.key, this.repository});
+
+  final ApiRepository? repository;
 
   @override
   State<AdminEquipmentScreen> createState() => _AdminEquipmentScreenState();
 }
 
 class _AdminEquipmentScreenState extends State<AdminEquipmentScreen> {
-  final ApiRepository _repository = ApiRepository();
+  late final ApiRepository _repository = widget.repository ?? ApiRepository();
   late Future<List<Equipment>> _equipment;
 
   @override
@@ -30,7 +32,7 @@ class _AdminEquipmentScreenState extends State<AdminEquipmentScreen> {
   Future<void> _openForm({Equipment? equipment}) async {
     final saved = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
-        builder: (_) => EquipmentFormScreen(equipment: equipment),
+        builder: (_) => EquipmentFormScreen(equipment: equipment, repository: _repository),
       ),
     );
     if (saved == true && mounted) _reload();
