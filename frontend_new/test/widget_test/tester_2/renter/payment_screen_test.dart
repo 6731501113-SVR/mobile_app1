@@ -4,10 +4,12 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:frontend/core/api_client.dart';
-import 'package:frontend/features/renter/controllers/payment_controller.dart';
-import 'package:frontend/features/renter/models.dart';
-import 'package:frontend/features/renter/models/borrow_request.dart';
-import 'package:frontend/features/renter/screens/payment_screen.dart';
+import 'package:frontend/features/payment/payment_controller.dart';
+import 'package:frontend/features/payment/payment_models.dart';
+import 'package:frontend/features/payment/payment_screen.dart';
+import 'package:frontend/core/models.dart';
+
+
 
 /// Widget test ของหน้า "ชำระเงิน"
 /// ตรรกะ (เลือกสลิป ตรวจไฟล์ นับเวลา) ทดสอบใน payment_controller_test.dart แล้ว

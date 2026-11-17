@@ -2,13 +2,14 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../../core/api_client.dart';
+import '../../../core/api_client.dart';
+import './slip_picker.dart';
+import './payment_controller.dart';
+import './payment_models.dart';
 import '../../core/theme.dart';
-import 'payment_controller.dart';
-import 'payment_format.dart';
-import 'payment_models.dart';
-import 'payment_widgets.dart';
-import 'slip_picker.dart';
+import '../payment/payment_widgets.dart';
+import '../payment/payment_format.dart';
+// import '../mock/app_store.dart' show requestTitle;
 
 /// U7: ชำระเงิน — สรุปยอด (ค่าเช่า + มัดจำ) สแกน QR แล้วแนบสลิป ผู้ดูแลจะตรวจและยืนยัน
 ///
@@ -20,10 +21,14 @@ class PaymentScreen extends StatefulWidget {
   final BorrowRequest request;
   final Future<void> Function(PickedSlip slip) onSubmitSlip;
 
+  /// ตัวเลือกรูปสลิป (ไม่ส่ง = ใช้แกลเลอรีจริง) เปิดให้ส่งตัวปลอมเข้ามาได้ตอนเขียน widget test
+  final SlipPicker? picker;
+
   const PaymentScreen({
     super.key,
     required this.request,
     required this.onSubmitSlip,
+    this.picker,
   });
 
   @override
@@ -41,7 +46,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
     super.initState();
     _c = PaymentController(
       request: widget.request,
-      picker: GallerySlipPicker(),
+      picker: widget.picker ?? GallerySlipPicker(),
       submitSlip: widget.onSubmitSlip,
     );
     _ticker = Timer.periodic(const Duration(seconds: 30), (_) => _c.refresh());

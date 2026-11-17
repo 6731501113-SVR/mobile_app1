@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:frontend/features/renter/models.dart';
-import 'package:frontend/features/renter/models/borrow_request.dart';
-import 'package:frontend/features/renter/screens/fine_screen.dart';
+import 'package:frontend/features/payment/payment_models.dart';
+import 'package:frontend/features/payment/fine_screen.dart';
+import 'package:frontend/core/models.dart';
+
+
 
 /// Widget test ของหน้า "ค่าปรับและมัดจำ"
 /// ตัวเลขที่ใช้ตรวจ ตรงกับตัวอย่างคำนวณในเอกสาร API Spec หัวข้อ 7
