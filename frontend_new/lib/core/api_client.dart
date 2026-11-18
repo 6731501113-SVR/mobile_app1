@@ -9,7 +9,7 @@ import 'package:http_parser/http_parser.dart';
 ///   flutter run --dart-define=API_BASE_URL=http://192.168.1.20:3000
 /// (10.0.2.2 is the host machine as seen from the Android emulator.)
 const String kApiBaseUrl =
-    String.fromEnvironment('API_BASE_URL', defaultValue: 'http://localhost:3000');
+    String.fromEnvironment('API_BASE_URL', defaultValue: 'https://fond-better-eel.eur-1.aiven.app');
 
 /// Known backend messages (English) -> Thai, plus a stable [code] for the ones
 /// the UI reacts to. Unknown messages are shown exactly as the server sent them.
