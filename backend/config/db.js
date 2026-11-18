@@ -11,6 +11,7 @@ const basePool = mysql.createPool({
     user: db.user,
     password: db.password,
     database: db.database,
+    ssl: { rejectUnauthorized: false },
     waitForConnections: true,
     connectionLimit: 10,
     timezone: TIME_ZONE,

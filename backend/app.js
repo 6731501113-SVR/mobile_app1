@@ -42,7 +42,7 @@ app.use(errorHandler);
 // --- Run Server (เริ่มรับ request หลังต่อฐานข้อมูลได้แล้วเท่านั้น) ---
 db.checkConnection()
     .then(() => {
-        app.listen(config.port, () => {
+        app.listen(config.port, '0.0.0.0', () => {
             console.log(`Server is running at port ${config.port}`);
             
             // เริ่มรันระบบเช็กตัดยอดใบคำขอที่เกิน 24 ชม. ทันทีเมื่อเปิดเซิร์ฟเวอร์
