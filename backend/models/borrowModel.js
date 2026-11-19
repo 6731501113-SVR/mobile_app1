@@ -11,11 +11,11 @@ const REQUEST_SELECT = `
 
 const ITEM_SELECT = `
     SELECT bi.*,
-           e.name      AS equipment_name,
-           e.asset_code,
+           COALESCE(bi.equipment_name, e.name) AS equipment_name,
+           COALESCE(bi.asset_code, e.asset_code) AS asset_code,
            e.image_url AS equipment_image
     FROM borrow_items bi
-    JOIN equipment e ON e.id = bi.equipment_id`;
+    LEFT JOIN equipment e ON e.id = bi.equipment_id`;
 
 // สถานะของใบที่ "จองช่วงวันนั้นไว้" (ใช้ทั้งปฏิทินจองและตรวจวันชนซ้ำ)
 const HOLDING_STATUSES = "'pending', 'approved', 'borrowed'";
@@ -107,10 +107,16 @@ exports.createRequest = async (d, conn) => {
 };
 
 exports.addItems = async (requestId, equipmentIds, conn) => {
-    await runner(conn).query(
-        'INSERT INTO borrow_items (request_id, equipment_id) VALUES ?',
-        [equipmentIds.map((eid) => [requestId, eid])]
-    );
+    for (const equipmentId of equipmentIds) {
+        await runner(conn).query(
+            `INSERT INTO borrow_items
+             (request_id, equipment_id, equipment_name, asset_code)
+             SELECT ?, id, name, asset_code
+             FROM equipment
+             WHERE id = ?`,
+            [requestId, equipmentId]
+        );
+    }
 };
 
 exports.setSlip = async (id, slipUrl) => {

@@ -52,6 +52,10 @@ class ApiRepository {
     }
   }
 
+  Future<void> deleteEquipment(int equipmentId) async {
+    await _authenticatedClient.delete('/api/equipments/$equipmentId');
+  }
+
   // --- Category APIs ---
   Future<List<Map<String, dynamic>>> getCategories() async {
     final response = await http.get(
@@ -108,12 +112,14 @@ class ApiRepository {
 
     if (imageFile != null) {
       final contentType = _imageContentType(imageFile);
-      request.files.add(http.MultipartFile.fromBytes(
-        'image',
-        await imageFile.readAsBytes(),
-        filename: imageFile.name,
-        contentType: contentType,
-      ));
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          'image',
+          await imageFile.readAsBytes(),
+          filename: imageFile.name,
+          contentType: contentType,
+        ),
+      );
     }
 
     var streamedResponse = await request.send();
@@ -172,7 +178,10 @@ class ApiRepository {
       '/api/borrows',
       query: {'status': 'pending'},
     );
-    return _parseBorrowRequests(decoded, 'Invalid pending borrow requests response');
+    return _parseBorrowRequests(
+      decoded,
+      'Invalid pending borrow requests response',
+    );
   }
 
   Future<List<BorrowRequest>> getDeliveryRequests() async {
@@ -180,13 +189,17 @@ class ApiRepository {
     return _parseBorrowRequests(decoded, 'Invalid borrow requests response')
         .where(
           (request) =>
-              (request.status == 'approved' && request.paymentStatus == 'paid') ||
+              (request.status == 'approved' &&
+                  request.paymentStatus == 'paid') ||
               request.status == 'borrowed',
         )
         .toList();
   }
 
-  List<BorrowRequest> _parseBorrowRequests(dynamic decoded, String errorMessage) {
+  List<BorrowRequest> _parseBorrowRequests(
+    dynamic decoded,
+    String errorMessage,
+  ) {
     if (decoded is! List) {
       throw FormatException(errorMessage);
     }
@@ -236,7 +249,8 @@ class ApiRepository {
 
   Future<List<BorrowRequest>> getPendingSlips() async {
     final response = await http.get(
-      Uri.parse('$baseUrl/borrows').replace(queryParameters: {'status': 'approved'}),
+      Uri.parse('$baseUrl/borrows')
+          .replace(queryParameters: {'status': 'approved'}),
       headers: _headers(),
     );
     if (response.statusCode == 200) {
@@ -245,11 +259,16 @@ class ApiRepository {
         throw const FormatException('Invalid pending slips response');
       }
       return decoded
-          .map((model) => BorrowRequest.fromJson(Map<String, dynamic>.from(model as Map)))
-          .where((request) =>
-              request.paymentStatus == 'pending' &&
-              request.slipUrl != null &&
-              request.slipUrl!.isNotEmpty)
+          .map(
+            (model) =>
+                BorrowRequest.fromJson(Map<String, dynamic>.from(model as Map)),
+          )
+          .where(
+            (request) =>
+                request.paymentStatus == 'pending' &&
+                request.slipUrl != null &&
+                request.slipUrl!.isNotEmpty,
+          )
           .toList();
     }
     throw Exception(_responseMessage(response, 'Failed to load pending slips'));

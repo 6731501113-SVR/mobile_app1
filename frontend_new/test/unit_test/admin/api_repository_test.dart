@@ -195,6 +195,14 @@ void main() {
     expect(sent.single.headers['authorization'], 'Bearer admin-token');
   });
 
+  test('deletes equipment through the backend admin route', () async {
+    await ApiRepository().deleteEquipment(31);
+
+    expect(sent.single.method, 'DELETE');
+    expect(sent.single.url.path, '/api/equipments/31');
+    expect(sent.single.headers['authorization'], 'Bearer admin-token');
+  });
+
   test('return sends per-item condition and damage fine to backend', () async {
     final repository = ApiRepository();
     final items = await repository.getBorrowRequestItems(42);

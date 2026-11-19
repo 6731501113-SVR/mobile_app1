@@ -48,4 +48,29 @@ async function checkConnection() {
     await pool.query('SELECT 1');
 }
 
-module.exports = { pool, withTransaction, checkConnection };
+async function ensureBorrowHistorySnapshots() {
+    const [rows] = await pool.query(
+        `SELECT COLUMN_NAME
+         FROM information_schema.COLUMNS
+         WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'borrow_items'
+           AND COLUMN_NAME IN ('equipment_name', 'asset_code')`,
+        [db.database]
+    );
+    const columns = new Set(rows.map((row) => row.COLUMN_NAME));
+
+    if (!columns.has('equipment_name')) {
+        await pool.query('ALTER TABLE borrow_items ADD COLUMN equipment_name VARCHAR(255) NULL');
+    }
+    if (!columns.has('asset_code')) {
+        await pool.query('ALTER TABLE borrow_items ADD COLUMN asset_code VARCHAR(100) NULL');
+    }
+
+    await pool.query(`
+        UPDATE borrow_items bi
+        JOIN equipment e ON e.id = bi.equipment_id
+        SET bi.equipment_name = COALESCE(bi.equipment_name, e.name),
+            bi.asset_code = COALESCE(bi.asset_code, e.asset_code)
+    `);
+}
+
+module.exports = { pool, withTransaction, checkConnection, ensureBorrowHistorySnapshots };

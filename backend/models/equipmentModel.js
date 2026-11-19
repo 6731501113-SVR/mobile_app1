@@ -70,6 +70,30 @@ exports.hasBorrowHistory = async (id) => {
     return rows.length > 0;
 };
 
+exports.hasActiveBorrow = async (id) => {
+    const [rows] = await pool.query(
+        `SELECT bi.id
+         FROM borrow_items bi
+         JOIN borrow_requests br ON br.id = bi.request_id
+         WHERE bi.equipment_id = ?
+           AND br.status IN ('pending', 'approved', 'borrowed')
+         LIMIT 1`,
+        [id]
+    );
+    return rows.length > 0;
+};
+
+exports.snapshotBorrowHistory = async (id) => {
+    await pool.query(
+        `UPDATE borrow_items bi
+         JOIN equipment e ON e.id = bi.equipment_id
+         SET bi.equipment_name = e.name,
+             bi.asset_code = e.asset_code
+         WHERE bi.equipment_id = ?`,
+        [id]
+    );
+};
+
 // ล็อกแถวอุปกรณ์ (FOR UPDATE) ใน transaction เพื่อกันสองคนจองชิ้นเดียวกันพร้อมกัน
 exports.findByIdsForUpdate = async (ids, conn) => {
     const [rows] = await runner(conn).query(

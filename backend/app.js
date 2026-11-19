@@ -40,7 +40,7 @@ app.use(notFound);
 app.use(errorHandler);
 
 // --- Run Server (เริ่มรับ request หลังต่อฐานข้อมูลได้แล้วเท่านั้น) ---
-db.checkConnection()
+Promise.all([db.checkConnection(), db.ensureBorrowHistorySnapshots()])
     .then(() => {
         app.listen(config.port, '0.0.0.0', () => {
             console.log(`Server is running at port ${config.port}`);

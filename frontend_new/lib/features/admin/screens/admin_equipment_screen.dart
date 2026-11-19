@@ -16,6 +16,7 @@ class AdminEquipmentScreen extends StatefulWidget {
 class _AdminEquipmentScreenState extends State<AdminEquipmentScreen> {
   late final ApiRepository _repository = widget.repository ?? ApiRepository();
   late Future<List<Equipment>> _equipment;
+  int? _deletingEquipmentId;
 
   @override
   void initState() {
@@ -32,10 +33,52 @@ class _AdminEquipmentScreenState extends State<AdminEquipmentScreen> {
   Future<void> _openForm({Equipment? equipment}) async {
     final saved = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
-        builder: (_) => EquipmentFormScreen(equipment: equipment, repository: _repository),
+        builder: (_) =>
+            EquipmentFormScreen(equipment: equipment, repository: _repository),
       ),
     );
     if (saved == true && mounted) _reload();
+  }
+
+  Future<void> _confirmDelete(Equipment equipment) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('ยืนยันการลบอุปกรณ์'),
+        content: Text(
+          'ต้องการลบ "${equipment.name}" หรือไม่?\nประวัติการยืมจะยังคงอยู่',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('ยกเลิก'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('ลบอุปกรณ์'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _deletingEquipmentId = equipment.id);
+    try {
+      await _repository.deleteEquipment(equipment.id!);
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('ลบ "${equipment.name}" สำเร็จ')));
+      _reload();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('ลบอุปกรณ์ไม่สำเร็จ: ${error.toString()}')),
+      );
+    } finally {
+      if (mounted) setState(() => _deletingEquipmentId = null);
+    }
   }
 
   String _imageUrl(String imageUrl) {
@@ -44,12 +87,12 @@ class _AdminEquipmentScreenState extends State<AdminEquipmentScreen> {
   }
 
   static String _statusLabel(String status) => switch (status) {
-        'available' => 'พร้อมใช้งาน',
-        'borrowed' => 'ถูกยืม',
-        'maintenance' => 'ซ่อมบำรุง',
-        'lost' => 'สูญหาย',
-        _ => status,
-      };
+    'available' => 'พร้อมใช้งาน',
+    'borrowed' => 'ถูกยืม',
+    'maintenance' => 'ซ่อมบำรุง',
+    'lost' => 'สูญหาย',
+    _ => status,
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -118,10 +161,31 @@ class _AdminEquipmentScreenState extends State<AdminEquipmentScreen> {
                     '${item.pricePerDay} บาท/วัน · มัดจำ ${item.deposit} บาท · ${_statusLabel(item.status)}',
                   ),
                   isThreeLine: true,
-                  trailing: IconButton(
-                    tooltip: 'แก้ไขอุปกรณ์',
-                    onPressed: () => _openForm(equipment: item),
-                    icon: const Icon(Icons.edit_outlined),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        tooltip: 'แก้ไขอุปกรณ์',
+                        onPressed: () => _openForm(equipment: item),
+                        icon: const Icon(Icons.edit_outlined),
+                      ),
+                      IconButton(
+                        tooltip: 'ลบอุปกรณ์',
+                        onPressed: _deletingEquipmentId == item.id
+                            ? null
+                            : () => _confirmDelete(item),
+                        icon: _deletingEquipmentId == item.id
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.delete_outline),
+                        color: Colors.red,
+                      ),
+                    ],
                   ),
                 ),
               );

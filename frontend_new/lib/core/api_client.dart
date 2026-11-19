@@ -8,8 +8,10 @@ import 'package:http_parser/http_parser.dart';
 /// Base URL of the backend. Override at build/run time:
 ///   flutter run --dart-define=API_BASE_URL=http://192.168.1.20:3000
 /// (10.0.2.2 is the host machine as seen from the Android emulator.)
-const String kApiBaseUrl =
-    String.fromEnvironment('API_BASE_URL', defaultValue: 'https://fond-better-eel.eur-1.aiven.app');
+const String kApiBaseUrl = String.fromEnvironment(
+  'API_BASE_URL',
+  defaultValue: 'https://fond-better-eel.eur-1.aiven.app',
+);
 
 /// Known backend messages (English) -> Thai, plus a stable [code] for the ones
 /// the UI reacts to. Unknown messages are shown exactly as the server sent them.
@@ -17,7 +19,10 @@ const String kApiBaseUrl =
   final l = m.toLowerCase();
   bool has(String s) => l.contains(s);
   if (has('invalid username or password')) {
-    return (message: 'รหัสนักศึกษาหรือรหัสผ่านไม่ถูกต้อง', code: 'INVALID_CREDENTIALS');
+    return (
+      message: 'รหัสนักศึกษาหรือรหัสผ่านไม่ถูกต้อง',
+      code: 'INVALID_CREDENTIALS',
+    );
   }
   if (has('username already exists')) {
     return (message: 'รหัสนักศึกษานี้ถูกใช้งานแล้ว', code: 'USERNAME_TAKEN');
@@ -29,7 +34,10 @@ const String kApiBaseUrl =
     return (message: 'มีหมวดหมู่นี้อยู่แล้ว', code: 'CATEGORY_TAKEN');
   }
   if (has('token expired') || has('invalid token') || has('no token')) {
-    return (message: 'เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่', code: 'UNAUTHORIZED');
+    return (
+      message: 'เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่',
+      code: 'UNAUTHORIZED',
+    );
   }
   if (has('admin only') || has('permission denied') || has('admin access')) {
     return (message: 'ไม่มีสิทธิ์ใช้งานส่วนนี้', code: 'FORBIDDEN');
@@ -44,7 +52,10 @@ const String kApiBaseUrl =
     );
   }
   if (has('is not available')) {
-    return (message: 'มีอุปกรณ์ที่ไม่พร้อมให้เช่า', code: 'EQUIPMENT_UNAVAILABLE');
+    return (
+      message: 'มีอุปกรณ์ที่ไม่พร้อมให้เช่า',
+      code: 'EQUIPMENT_UNAVAILABLE',
+    );
   }
   if (has('only pending requests can be cancelled')) {
     return (message: 'ยกเลิกได้เฉพาะคำขอที่รออนุมัติ', code: 'NOT_CANCELLABLE');
@@ -65,7 +76,31 @@ const String kApiBaseUrl =
     return (message: 'ไฟล์ใหญ่เกินไป (สูงสุด 5 MB)', code: 'BAD_FILE');
   }
   if (has('server error')) {
-    return (message: 'เซิร์ฟเวอร์ขัดข้อง กรุณาลองอีกครั้ง', code: 'SERVER_ERROR');
+    return (
+      message: 'เซิร์ฟเวอร์ขัดข้อง กรุณาลองอีกครั้ง',
+      code: 'SERVER_ERROR',
+    );
+  }
+  if (has('equipment not found')) {
+    return (message: 'ไม่พบอุปกรณ์ที่ต้องการลบ', code: 'EQUIPMENT_NOT_FOUND');
+  }
+  if (has('currently borrowed')) {
+    return (
+      message: 'ไม่สามารถลบอุปกรณ์ที่กำลังถูกยืมอยู่',
+      code: 'EQUIPMENT_BORROWED',
+    );
+  }
+  if (has('currently reserved or borrowed')) {
+    return (
+      message: 'ไม่สามารถลบอุปกรณ์ที่มีคำขอเช่าหรือกำลังถูกยืมอยู่',
+      code: 'EQUIPMENT_ACTIVE_BORROW',
+    );
+  }
+  if (has('has borrow history')) {
+    return (
+      message: 'ไม่สามารถลบอุปกรณ์นี้ได้เนื่องจากมีประวัติการยืม ให้เปลี่ยนสถานะเป็นซ่อมบำรุงหรือสูญหายแทน',
+      code: 'EQUIPMENT_HAS_BORROW_HISTORY',
+    );
   }
   return (message: m, code: null);
 }
@@ -91,8 +126,8 @@ class ApiException implements Exception {
 
 class ApiClient {
   ApiClient({String? baseUrl, http.Client? client})
-      : _baseUrl = (baseUrl ?? kApiBaseUrl).replaceAll(RegExp(r'/+$'), ''),
-        _http = client ?? http.Client();
+    : _baseUrl = (baseUrl ?? kApiBaseUrl).replaceAll(RegExp(r'/+$'), ''),
+      _http = client ?? http.Client();
 
   final String _baseUrl;
   final http.Client _http;
@@ -114,6 +149,9 @@ class ApiClient {
 
   Future<dynamic> patch(String path, {Object? body}) =>
       _send('PATCH', path, body: body ?? const <String, dynamic>{});
+
+  Future<dynamic> delete(String path, {Object? body}) =>
+      _send('DELETE', path, body: body);
 
   Future<dynamic> putMultipart(
     String path, {
@@ -139,10 +177,15 @@ class ApiClient {
 
     final http.Response response;
     try {
-      final streamed = await _http.send(request).timeout(const Duration(seconds: 60));
+      final streamed = await _http
+          .send(request)
+          .timeout(const Duration(seconds: 60));
       response = await http.Response.fromStream(streamed);
     } on TimeoutException {
-      throw const ApiException('เซิร์ฟเวอร์ตอบสนองช้าเกินไป กรุณาลองอีกครั้ง', code: 'NETWORK');
+      throw const ApiException(
+        'เซิร์ฟเวอร์ตอบสนองช้าเกินไป กรุณาลองอีกครั้ง',
+        code: 'NETWORK',
+      );
     } on http.ClientException {
       throw const ApiException(
         'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ กรุณาตรวจสอบอินเทอร์เน็ต',
@@ -225,6 +268,11 @@ class ApiClient {
     // Only treat as "session expired" when we actually sent a token.
     if (response.statusCode == 401 && sentToken != null) onUnauthorized?.call();
 
-    throw ApiException(message, code: code, status: response.statusCode, details: details);
+    throw ApiException(
+      message,
+      code: code,
+      status: response.statusCode,
+      details: details,
+    );
   }
 }

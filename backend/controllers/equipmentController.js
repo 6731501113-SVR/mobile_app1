@@ -122,16 +122,13 @@ exports.remove = async (req, res) => {
     const item = await equipmentModel.findRawById(req.params.id);
     if (!item) throw new HttpError(404, { message: 'Equipment not found' });
 
-    if (item.status === 'borrowed') {
-        throw new HttpError(409, { message: 'Cannot delete: equipment is currently borrowed' });
-    }
-    // ตารางไม่มี foreign key จึงเช็กเองว่ามีประวัติการยืมไหม (ไม่ให้ประวัติกำพร้า)
-    if (await equipmentModel.hasBorrowHistory(item.id)) {
+    if (item.status === 'borrowed' || await equipmentModel.hasActiveBorrow(item.id)) {
         throw new HttpError(409, {
-            message: 'Cannot delete: equipment has borrow history. Set status to maintenance or lost instead.'
+            message: 'Cannot delete: equipment is currently reserved or borrowed'
         });
     }
 
+    await equipmentModel.snapshotBorrowHistory(item.id);
     await equipmentModel.remove(item.id);
     removeUploadedFile(item.image_url);
     res.json({ message: 'Equipment deleted' });
