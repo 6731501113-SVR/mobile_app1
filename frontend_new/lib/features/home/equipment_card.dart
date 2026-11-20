@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/api_client.dart';
 import '../../core/dates.dart';
 import '../../core/equipment_ui.dart';
 import '../../core/format.dart';
@@ -36,6 +37,12 @@ class EquipmentCard extends StatelessWidget {
     final subtitle = (e.status == EquipmentStatus.borrowed && e.dueDate != null)
         ? '${e.assetCode} · คืน ${thaiShortDate(e.dueDate!)}'
         : e.assetCode;
+    final imageUrl = e.imageUrl?.trim();
+    final image = imageUrl == null || imageUrl.isEmpty
+        ? null
+        : imageUrl.startsWith('http')
+        ? imageUrl
+        : '$kApiBaseUrl${imageUrl.startsWith('/') ? '' : '/'}$imageUrl';
 
     return Material(
       color: Colors.white,
@@ -67,11 +74,31 @@ class EquipmentCard extends StatelessWidget {
                           : AppColors.tileMuted,
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: Icon(
-                      categoryIcon(e.categoryName),
-                      size: 32,
-                      color: enabled ? AppColors.primary : AppColors.textMuted,
-                    ),
+                    child: image == null
+                        ? Icon(
+                            categoryIcon(e.categoryName),
+                            size: 32,
+                            color: enabled
+                                ? AppColors.primary
+                                : AppColors.textMuted,
+                          )
+                        : ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: Image.network(
+                              image,
+                              width: double.infinity,
+                              height: 72,
+                              fit: BoxFit.contain,
+                              errorBuilder: (context, error, stackTrace) =>
+                                  Icon(
+                                    categoryIcon(e.categoryName),
+                                    size: 32,
+                                    color: enabled
+                                        ? AppColors.primary
+                                        : AppColors.textMuted,
+                                  ),
+                            ),
+                          ),
                   ),
                   if (enabled)
                     Positioned(
